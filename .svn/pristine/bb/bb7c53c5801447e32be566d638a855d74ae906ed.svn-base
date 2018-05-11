@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VariablesViewState
+   version = "1.0">
+   <ContextStates>
+      <ContextState
+         contextName = "-[OtherViewController viewDidLoad]:OtherViewController.m">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.goodsType">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "-[OtherViewController sendGoodsNum:]:OtherViewController.m">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.goodsType">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "-[OtherViewController viewWillAppear:]:OtherViewController.m">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.goodsType">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+   </ContextStates>
+</VariablesViewState>

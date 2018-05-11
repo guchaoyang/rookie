@@ -1,0 +1,347 @@
+//
+//  AllSummaryViewController.m
+//  shopping
+//
+//  Created by 谷朝阳 on 2017/12/29.
+//  Copyright © 2017年 GCY. All rights reserved.
+//
+
+#import "AllSummaryViewController.h"
+
+#import "HomeTableViewCell.h"
+
+#import "GoodsDetailViewController.h"
+
+#import "HomeListModel.h"
+
+@interface AllSummaryViewController ()<UITableViewDataSource, UITableViewDelegate>
+{
+    UILabel *_allNumLabel;
+    UILabel *_newNumLabel;
+    UILabel *_oldNumLabel;
+    NSInteger _pageNum;
+    NSInteger _sort;
+}
+@property(nonatomic, strong)UITableView    *tableView;
+
+@property(nonatomic, strong)NSMutableArray *dataArray;
+
+@end
+
+@implementation AllSummaryViewController
+
+- (void)viewWillAppear:(BOOL)animated{
+    [super viewWillAppear:animated];
+    
+//    [self.navigationController.navigationBar setBackgroundImage:[UIImage createImageWithColor:[UIColor whiteColor] frame:self.navigationController.navigationBar.bounds] forBarMetrics:UIBarMetricsDefault];
+    [self.navigationController.navigationBar setShadowImage:[UIImage new]];
+
+//    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleDefault;
+    
+}
+
+- (void)viewWillDisappear:(BOOL)animated{
+    [super viewWillDisappear:animated];
+    
+//    [self.navigationController.navigationBar setBackgroundImage:image(@"home_img_navBackground") forBarMetrics:UIBarMetricsDefault];
+//    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleLightContent;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+    self.view.backgroundColor = BackgroundColor;
+    
+    _pageNum = 1;
+    _sort = 1;
+    
+    [self.tableView.mj_header beginRefreshing];
+    
+    [self createNavigationItem];
+    
+    [self layoutView];
+    
+    [self getGoodsTotalInfo];
+}
+
+- (void)createNavigationItem{
+    
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 100, 44)];
+    title.text = @"全网汇总";
+    title.textAlignment = NSTextAlignmentCenter;
+    title.textColor = [UIColor whiteColor];
+    self.navigationItem.titleView = title;
+    //导航返回按钮
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    backBtn.frame = CGRectMake(0, 0, 30, 30);
+    //图片左移
+    [backBtn setContentEdgeInsets:UIEdgeInsetsMake(0, 0, 0, 15)];
+    [backBtn addTarget:self action:@selector(backClick) forControlEvents:UIControlEventTouchUpInside];
+    [backBtn setImage:image(NAV_WHITE_BACKBTN_NAME) forState:UIControlStateNormal];
+    UIBarButtonItem *left = [[UIBarButtonItem alloc]initWithCustomView:backBtn];
+    self.navigationItem.leftBarButtonItem = left;
+    
+}
+
+- (void)layoutView{
+    
+    __weak typeof(self) weakSelf = self;//防止循环引用
+    //渐变背景图
+    UIImageView *dataBackImage = [[UIImageView alloc] init];
+    dataBackImage.image = image(@"img_allSummary_background");
+    [weakSelf.view addSubview:dataBackImage];
+    
+    [dataBackImage mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.top.equalTo(weakSelf.view);
+        make.height.mas_equalTo(80*SProportion_Height);
+    }];
+//    [Helper setRichText:cell.goodsIncomePrice titleString:cell.goodsIncomePrice.text textFont:font(15) fontRang:NSMakeRange(6, cell.goodsIncomePrice.text.length-6) textColor:Red_Color colorRang:NSMakeRange(6, cell.goodsIncomePrice.text.length-6)];
+    //总件数
+    _allNumLabel = [[UILabel alloc] init];
+    _allNumLabel.text = @"- 件";
+    _allNumLabel.font = font(25);
+    _allNumLabel.textColor = [UIColor whiteColor];
+    _allNumLabel.adjustsFontSizeToFitWidth = YES;
+    [dataBackImage addSubview:_allNumLabel];
+    
+    [_allNumLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.mas_equalTo(weakSelf.view).mas_offset(20*SProportion_Width);
+        make.top.mas_equalTo(weakSelf.view).mas_offset(15*SProportion_Height);
+        make.size.mas_equalTo(CGSizeMake(200*SProportion_Width, 25*SProportion_Height));
+    }];
+    
+    //新增件数
+    _newNumLabel = [[UILabel alloc] init];
+    _newNumLabel.text = @"今日新增  --";
+    _newNumLabel.font = font(16);
+    _newNumLabel.textColor = [UIColor whiteColor];
+    _newNumLabel.adjustsFontSizeToFitWidth = YES;
+    [dataBackImage addSubview:_newNumLabel];
+    
+    [_newNumLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.mas_equalTo(_allNumLabel);
+        make.top.mas_equalTo(_allNumLabel.mas_bottom).mas_offset(5*SProportion_Height);
+        make.size.mas_equalTo(CGSizeMake(120*SProportion_Width, 20*SProportion_Height));
+    }];
+    
+    //过期件数
+    _oldNumLabel = [[UILabel alloc] init];
+    _oldNumLabel.text = @"今日过期  --";
+    _oldNumLabel.font = font(16);
+    _oldNumLabel.textColor = [UIColor whiteColor];
+    _oldNumLabel.adjustsFontSizeToFitWidth = YES;
+    [dataBackImage addSubview:_oldNumLabel];
+    
+    [_oldNumLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.mas_equalTo(_newNumLabel.mas_right).mas_offset(10*SProportion_Width);
+        make.top.mas_equalTo(_newNumLabel);
+        make.size.mas_equalTo(CGSizeMake(120*SProportion_Width, 20*SProportion_Height));
+    }];
+    
+    NSArray *btnTitles = @[@"最新",@"销量",@"价格",@"人气"];
+    for (int i=0; i<btnTitles.count; i++) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.tag = 100+i;
+        button.frame = CGRectMake(Screen_Width/4*i, 80*SProportion_Height, Screen_Width/4, 30*SProportion_Height);
+        [button setTitleColor:Dark_TextColor forState:UIControlStateNormal];
+        if (i==0) {
+            [button setTitleColor:[UIColor redColor] forState:UIControlStateNormal];
+        }
+        [button setBackgroundColor:[UIColor whiteColor]];
+        button.titleLabel.font = font(15);
+        [button setTitle:btnTitles[i] forState:UIControlStateNormal];
+        [button addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+        [weakSelf.view addSubview:button];
+        
+        if (i == 2) {
+            [button setImage:image(@"home_btn_priceSort_def") forState:UIControlStateNormal];
+            [button layoutButtonWithEdgeInsetsStyle:MKButtonEdgeInsetsStyleRight imageTitleSpace:5];
+        }
+    }
+    
+    //榜单列表
+    [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.bottom.equalTo(weakSelf.view);
+        make.top.equalTo(weakSelf.view).mas_equalTo(110*SProportion_Height);
+    }];
+}
+
+- (void)getGoodsTotalInfo{
+    
+    [HTTPManager getHomeGoodsTotalInfo:^(NSString *code, NSString *msg, NSDictionary *result) {
+        if (code.intValue == 200) {
+            _allNumLabel.text = [NSString stringWithFormat:@"%@ 件" ,result[@"total"]];
+            _newNumLabel.text = [NSString stringWithFormat:@"今日新增  %@" ,result[@"add"]];
+            _oldNumLabel.text = [NSString stringWithFormat:@"今日过期  %@" ,result[@"del"]];
+        }else{
+            
+            [XSInfoView showInfo:msg onView:self.view];
+        }
+        
+    }];
+}
+
+- (void)loadingData{
+    
+    if (_pageNum == 1) {
+        [self.dataArray removeAllObjects];
+    }
+    
+    [HTTPManager getAllGoodsInfo:^(NSString *code, NSString *msg, NSArray *result) {
+        
+        if (code.intValue == 200) {
+            if (result.count != 0) {
+                for (HomeListModel *model in result) {
+                    [self.dataArray addObject:model];
+                }
+                
+                [self.tableView reloadData];
+                
+                [self.tableView.mj_header endRefreshing];
+                [self.tableView.mj_footer endRefreshing];
+
+            }else{
+                
+                [self.tableView.mj_header endRefreshing];
+                [self.tableView.mj_footer endRefreshingWithNoMoreData];
+            }
+        }
+        
+        
+        
+    } pageNum:_pageNum size:DEFULT_LOAD_NUM sort:_sort];
+}
+
+//上拉刷新数据
+- (void)loadNewData{
+    _pageNum = 1;
+    [self loadingData];
+}
+- (void)loadMoreData{
+    _pageNum ++;
+    [self loadingData];
+}
+
+- (void)buttonClick:(UIButton *)button{
+    [button setTitleColor:Red_Color forState:UIControlStateNormal];
+    for (int i=100; i<104; i++) {
+        if (button.tag != i) {
+            UIButton *btn = [self.view viewWithTag:i];
+            [btn setTitleColor:Dark_TextColor forState:UIControlStateNormal];
+        }
+    }
+    
+    if (button.tag != 102) {
+        UIButton *priceBtn = [self.view viewWithTag:102];
+        [priceBtn setImage:image(@"home_btn_priceSort_def") forState:UIControlStateNormal];
+    }
+    
+    if (button.tag == 100) {
+        _sort = 1;
+    }else if (button.tag == 101){
+        _sort = 2;
+    }else if (button.tag == 102){
+        if (button.isSelected == NO) {
+            NSLog(@"升序");
+            _sort = 3;
+            button.selected = YES;
+            [button setImage:image(@"home_btn_priceSort_high") forState:UIControlStateNormal];
+        }else{
+            NSLog(@"降序");
+            _sort = 4;
+            button.selected = NO;
+            [button setImage:image(@"home_btn_priceSort_low") forState:UIControlStateNormal];
+        }
+    }else if (button.tag == 103){
+        _sort = 5;
+    }
+    
+    _pageNum = 1;
+    
+    [self loadingData];
+}
+
+#pragma mark - UITableViewDataSource
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
+    return self.dataArray.count;
+}
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath{
+    
+    HomeTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell" forIndexPath:indexPath];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    
+    if (self.dataArray.count == 0) {
+        [XSInfoView showInfo:@"正在刷新商品..." onView:self.view];
+    }else{
+        HomeListModel *model = self.dataArray[indexPath.row];
+        
+        setNetImage(cell.goodsPic, model.thumb, @"home_img_recmdList_plaHolder");
+        cell.goodsName.text = model.title;
+        cell.goodsOriginalPrice.text = [NSString stringWithFormat:@"天猫价 ￥%.1f", [model.originalPrice floatValue]];;
+        cell.goodsPrice.text = [NSString stringWithFormat:@"￥%.1f", [model.price floatValue]];
+        cell.couponsPrice.text = [NSString stringWithFormat:@"%@元券", model.promoPrice];
+        cell.goodsSales.text = [NSString stringWithFormat:@"月销%@", model.sale];
+    }
+    
+    return cell;
+}
+
+#pragma mark - UITableViewDelegate
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
+    if (self.dataArray.count == 0) {
+        [XSInfoView showInfo:@"正在刷新商品..." onView:self.view];
+    }else{
+        GoodsDetailViewController *gdvc = [[GoodsDetailViewController alloc] init];
+        HomeListModel *model = self.dataArray[indexPath.row];
+        gdvc.goodsId = model.goods_id;
+        [self.navigationController pushViewController:gdvc animated:YES];
+    }
+    
+}
+
+- (void)backClick{
+    //返回
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+#pragma mark -
+
+- (UITableView *)tableView{
+    if (!_tableView) {
+        _tableView = [[UITableView alloc] init];
+        _tableView.backgroundColor = BackgroundColor;
+        _tableView.delegate = self;
+        _tableView.dataSource = self;
+        _tableView.rowHeight = 100*SProportion_Height;
+        _tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+        [_tableView registerClass:[HomeTableViewCell class] forCellReuseIdentifier:@"cell"];
+        _tableView.mj_header = [MJRefreshNormalHeader headerWithRefreshingTarget:self refreshingAction:@selector(loadNewData)];
+        _tableView.mj_footer = [MJRefreshBackNormalFooter footerWithRefreshingTarget:self refreshingAction:@selector(loadMoreData)];
+        [self.view addSubview:_tableView];
+    }
+    return _tableView;
+}
+
+- (NSMutableArray *)dataArray{
+    if (!_dataArray) {
+        _dataArray = [[NSMutableArray alloc] init];
+    }
+    return _dataArray;
+}
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+/*
+#pragma mark - Navigation
+
+// In a storyboard-based application, you will often want to do a little preparation before navigation
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    // Get the new view controller using [segue destinationViewController].
+    // Pass the selected object to the new view controller.
+}
+*/
+
+@end

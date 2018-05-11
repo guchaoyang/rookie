@@ -1,0 +1,153 @@
+//
+//  RequestAddress.h
+//  shopping
+//
+//  Created by 成都牛牛优选信息科技有限公司 on 2017/12/22.
+//  Copyright © 2017年 成都牛牛优选信息科技有限公司. All rights reserved.
+//
+
+#ifndef RequestAddress_h
+#define RequestAddress_h
+
+#define QQ_APP_ID @"1106675925"//QQ appkey
+#define WECHAT_APPKEY @"wx1b276fe3e3036e64"//微信appkey
+#define WECHAT_APPSECRET @"eafe8b7b7647817e7573d2f1dff62932"//微信 appsecret
+#define DES_KEY @"wrSzY4pKvtkhs02CQh3FrR90"//DES密钥
+#define DES_IV  @"x5OQ0ApD"//DES向量
+#define QY_APPKEY @"a63ad7a8b2f2dde925e0be4666c94fe0"//网易七鱼
+#define UMENG_APPKEY @"5aa0efc7f43e485756000114"//友盟APPkey
+//#define DUIBA_APPKEY @"3jiby5sMJVkuVoiHbD37JLLYdmva"//兑吧APPkey
+#define ALIBAICHUAN_APPKEY @"24795861"
+#define ALIMAMATAOKE_PID @"mm_129949802_0_0"//阿里妈妈淘客PID
+#define APP_NAME @"云豆街"
+#define APP_ID @"1371978009"
+
+//下拉加载默认条目
+#define DEFULT_LOAD_NUM @"10"
+
+//本地服务器域名
+//#define REQUEST_URL @"http://192.168.2.206:17089/api"
+
+//测试服务器域名
+//#define REQUEST_URL @"https://tk.aoreal.com/api"
+
+//正式服务器域名
+#define REQUEST_URL @"https://api.yundoujie.com"
+
+//首页推荐商品列表
+#define HOME_GOODS_RECOMMEND_LIST @"/v1/goods/recommend"
+
+//首页轮播图
+#define HOME_BANNER @"/v1/banner"
+
+//商品详情 或者 全网汇总
+#define GOODS_DETAIL @"/v1/goods"
+
+//商品数量汇总
+#define GOODS_TOTAL @"/v1/goods/total"
+
+//9.9包邮
+#define GOODS_SHIPPING @"/v1/goods/shipping"
+
+//榜单栏目
+#define GOODS_RANK @"/v1/goods/rank"
+
+//首页主分类(主分类和子分类所有信息)
+#define HOME_MAIN_CATEGORY @"/v1/category"
+
+//查询指定主分类下所有商品列表
+#define GOODS_CATEGORY @"/v1/goods/category"
+
+//商品搜索结果
+#define GOODS_SEARCH @"/v1/goods/search"
+
+//查询系统时间
+#define SYSTEM_TIME @"/v1/sys/time"
+
+//查询全部活动列表
+#define ACTIVITY_LIST @"/v1/activity"
+
+//增加访问次数
+#define ACTIVITY_FOOT @"/v1/activity/foot"
+
+//发送短信获取验证码
+#define LOGIN_SMS @"/v2/login/sms"
+
+//登录
+#define LOGIN_CODE @"/v1/login/code"
+
+//修改密码获取验证码
+#define USER_PASSWORD_SMS @"/v1/user/password/sms"
+
+//修改密码
+#define USER_PASSWORD @"/v1/user/password"
+
+//查询用户信息 或者 修改用户信息
+#define USER_INFO @"/v1/user/info"
+
+//账号密码登录
+#define LOGIN_PASS @"/v1/login/pass"
+
+//查询收藏状态(GET) 添加收藏(POST) 取消收藏(DELETE)
+#define GOODS_STAR @"/v1/goods/star"
+
+//热门搜索
+#define GOODS_SEARCH_KEYS @"/v1/goods/search/keys"
+
+//精选推送
+#define GOODS_PUSH @"/v1/goods/push"
+
+//足迹
+#define GOODS_USER_VISIT @"/v1/goods/user/visit"
+
+//提交意见反馈
+#define USER_FEEDBACK @"/v1/feedback"
+
+//获取推广链接
+#define SHARE_URL @"/v1/share/url"
+
+//获取分享图片
+#define SHARE_IMAGE @"/v1/share/poster"
+
+//系统消息
+#define MESSAGE_SYS @"/v1/message/sys"
+
+//上传头像
+#define UPLOAD_USERHEAD @"/v1/user/head"
+
+//检查最新版本号
+#define CHECK_VERSION @"/v1/sys/version/iOS"
+
+///发送友盟推送设备号
+#define POST_UMENGPUSH_DEVICETOKEN @"/v1/sys/device/ios"
+
+///淘宝订单自动兑换金币
+#define ORDER_INTEGRAL @"/v1/order/integral"
+
+///保存淘宝授权信息
+#define USEFR_TAOBAO @"/v1/user/tb"
+
+///查询按钮是否可用
+#define SYS_BTN_STATUS @"/v1/sys/status"
+
+///获取意见反馈说明文字
+#define FEEDBACK_DEFINE @"/v1/feedback/define"
+
+
+
+
+#pragma mark - H5地址链接
+///现金记录
+#define CASH_RECORD @"/v1/cash/forward"
+
+///金币记录
+#define GOLD_RECORD @"/v1/integral/forward"
+
+///金币兑换
+#define GOLD_EXCHANGE @"/v1/integral/exchange/forward"
+
+///邀请记录
+#define INVITE_RECORD @"/v1/share/forward"
+
+
+#endif /* RequestAddress_h */

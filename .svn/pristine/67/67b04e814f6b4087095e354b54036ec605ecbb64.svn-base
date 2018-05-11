@@ -1,0 +1,318 @@
+//
+//  AppDelegate.m
+//  shopping
+//
+//  Created by 谷朝阳 on 2017/12/7.
+//  Copyright © 2017年 GCY. All rights reserved.
+//
+
+#import "AppDelegate.h"
+
+#import "TabBarController.h"
+#import "UpdateApp.h"
+#import "SELUpdateAlert.h"//
+//网易七鱼
+#import "QYSDK.h"
+//分享
+#import <UMSocialCore/UMSocialCore.h>
+//推送
+#import "UMessage.h"
+//统计
+#import <UMCommon/UMCommon.h>
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
+#import <UserNotifications/UserNotifications.h>
+#endif
+//阿里百川电商SDK
+#import <AlibcTradeSDK/AlibcTradeSDK.h>
+
+@interface AppDelegate ()<UNUserNotificationCenterDelegate>
+
+@end
+
+@implementation AppDelegate
+
+
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+
+    NSLog(@"沙盒路径：%@",NSHomeDirectory());
+    KEYBOARDMANAGER;//IQKEY的一些设置
+    
+//    [UserDefaultUtil saveValue:@"1" forKey:IS_PARTNER];//是否是合伙人 测试时使用
+    
+    [BasicInfoClass shared].base_url = REQUEST_URL;//赋值基础域名
+    
+    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleLightContent;
+    //注册网易七鱼客服
+    [[QYSDK sharedSDK] registerAppId:QY_APPKEY appName:APP_NAME];
+    
+    [HTTPManager getSystemTimeInfo:^(NSString *code, NSString *msg) {
+        //查询系统时间（毫秒） 开启定时器
+    }];
+    
+    /* 友盟分享 打开调试日志 */
+    [[UMSocialManager defaultManager] openLog:NO];
+    
+    /* 设置友盟appkey */
+    [[UMSocialManager defaultManager] setUmSocialAppkey:UMENG_APPKEY];
+    
+    [self configUSharePlatforms];
+    
+    [self confitUShareSettings];
+    
+    /* 注册友盟推送 */
+    //设置 AppKey 及 LaunchOptions 适配Https
+    [UMessage startWithAppkey:UMENG_APPKEY launchOptions:launchOptions httpsEnable:YES ];
+    [UMessage openDebugMode:NO];//开发模式为YES。生产模式为NO
+    //注册通知
+    [UMessage registerForRemoteNotifications];
+    //iOS10必须加下面这段代码。
+    if (@available(iOS 10.0, *)) {
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        center.delegate=self;
+        UNAuthorizationOptions types10=UNAuthorizationOptionBadge|UNAuthorizationOptionAlert|UNAuthorizationOptionSound;
+        [center requestAuthorizationWithOptions:types10 completionHandler:^(BOOL granted, NSError * _Nullable error) {
+            if (granted) {
+                //点击允许
+                
+            } else {
+                //点击不允许
+                
+            }
+        }];
+    }
+    //注意App发布时请关闭日志输出
+    [UMessage setLogEnabled:NO];
+    
+    /****友盟统计****/
+    [UMConfigure initWithAppkey:UMENG_APPKEY channel:nil];
+    //设置为YES, 输出可供调试参考的log信息. 发布产品时必须设置为NO
+    [UMConfigure setLogEnabled:NO];
+    // 统计组件配置 （统计场景设置）
+    [MobClick setScenarioType:E_UM_NORMAL];
+    
+    /****阿里百川电商SDK注册****/
+    // 百川平台基础SDK初始化，加载并初始化各个业务能力插件
+    [[AlibcTradeSDK sharedInstance] asyncInitWithSuccess:^{
+        NSLog(@"阿里百川电商SDK Init success");
+    } failure:^(NSError *error) {
+        NSLog(@"阿里百川电商SDK Init failed: %@", error.description);
+    }];
+    
+    // 开发阶段打开日志开关，方便排查错误信息
+    //默认调试模式打开日志,release关闭,可以不调用下面的函数
+    [[AlibcTradeSDK sharedInstance] setDebugLogOpen:NO];
+    [[AlibcTradeSDK sharedInstance] setIsvVersion:CURRENT_VERSION];
+    [[AlibcTradeSDK sharedInstance] setEnv:AlibcEnvironmentRelease];
+    // 配置全局的淘客参数
+    //如果没有阿里妈妈的淘客账号,setTaokeParams函数需要调用
+    AlibcTradeTaokeParams *taokeParams = [[AlibcTradeTaokeParams alloc] init];
+    taokeParams.pid = ALIMAMATAOKE_PID; //mm_XXXXX为你自己申请的阿里妈妈淘客pid
+    taokeParams.extParams = @{@"taokeAppkey":ALIBAICHUAN_APPKEY};
+    [[AlibcTradeSDK sharedInstance] setTaokeParams:taokeParams];
+    
+    //设置全局的app标识，在电商模块里等同于isv_code
+    //没有申请过isv_code的接入方,默认不需要调用该函数
+//    [[AlibcTradeSDK sharedInstance] setISVCode:@"your_isv_code"];
+    
+    // 设置全局配置，是否强制使用h5
+    [[AlibcTradeSDK sharedInstance] setIsForceH5:NO];
+    
+    self.window.rootViewController = [[TabBarController alloc] init];
+
+    return YES;
+}
+
+- (void)confitUShareSettings
+{
+    /*
+     * 打开图片水印
+     */
+    //[UMSocialGlobal shareInstance].isUsingWaterMark = YES;
+    
+    /*
+     * 关闭强制验证https，可允许http图片分享，但需要在info.plist设置安全域名
+     <key>NSAppTransportSecurity</key>
+     <dict>
+     <key>NSAllowsArbitraryLoads</key>
+     <true/>
+     </dict>
+     */
+    //[UMSocialGlobal shareInstance].isUsingHttpsWhenShareContent = NO;
+    
+}
+
+- (void)configUSharePlatforms
+{
+    /*
+     设置微信的appKey和appSecret
+     [微信平台从U-Share 4/5升级说明]http://dev.umeng.com/social/ios/%E8%BF%9B%E9%98%B6%E6%96%87%E6%A1%A3#1_1
+     */
+    [[UMSocialManager defaultManager] setPlaform:UMSocialPlatformType_WechatSession appKey:WECHAT_APPKEY appSecret:WECHAT_APPSECRET redirectURL:nil];
+    
+    /* 设置分享到QQ互联的appID
+     * U-Share SDK为了兼容大部分平台命名，统一用appKey和appSecret进行参数设置，而QQ平台仅需将appID作为U-Share的appKey参数传进即可。
+     100424468.no permission of union id
+     [QQ/QZone平台集成说明]http://dev.umeng.com/social/ios/%E8%BF%9B%E9%98%B6%E6%96%87%E6%A1%A3#1_3
+     */
+    [[UMSocialManager defaultManager] setPlaform:UMSocialPlatformType_QQ appKey:QQ_APP_ID/*设置QQ平台的appID*/  appSecret:nil redirectURL:@"https://www.zhujujinfu.com"];
+    
+    /*
+     设置新浪的appKey和appSecret
+     [新浪微博集成说明]http://dev.umeng.com/social/ios/%E8%BF%9B%E9%98%B6%E6%96%87%E6%A1%A3#1_2
+     */
+//    [[UMSocialManager defaultManager] setPlaform:UMSocialPlatformType_Sina appKey:@"3921700954"  appSecret:@"04b48b094faeb16683c32669824ebdad" redirectURL:@"https://sns.whalecloud.com/sina2/callback"];
+}
+
+// 支持所有iOS系统
+- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
+{
+    //6.3的新的API调用，是为了兼容国外平台(例如:新版facebookSDK,VK等)的调用[如果用6.2的api调用会没有回调],对国内平台没有影响
+    BOOL result = [[UMSocialManager defaultManager] handleOpenURL:url sourceApplication:sourceApplication annotation:annotation];
+    if (!result) {
+        // 其他如支付等SDK的回调
+        // 如果百川处理过会返回YES
+        if (![[AlibcTradeSDK sharedInstance] application:application openURL:url sourceApplication:sourceApplication annotation:annotation]) {
+            // 处理其他app跳转到自己的app
+        }
+    }
+    return result;
+    
+}
+
+- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary<NSString *,id> *)options {
+    // 新接口写法
+    if (@available(iOS 9.0, *)) {
+        if (![[AlibcTradeSDK sharedInstance] application:application
+                                                 openURL:url
+                                                 options:options]) {
+            //处理其他app跳转到自己的app，如果百川处理过会返回YES
+        }
+    } else {
+        // Fallback on earlier versions
+    }
+    return YES;
+}
+
+//iOS10以下使用这个方法接收通知
+- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo
+{
+    //关闭U-Push自带的弹出框
+    [UMessage setAutoAlert:YES];
+    [UMessage didReceiveRemoteNotification:userInfo];
+}
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken
+{
+    NSString *uMengPushToken = [[[[deviceToken description] stringByReplacingOccurrencesOfString: @"<" withString: @""]
+                                 stringByReplacingOccurrencesOfString: @">" withString: @""]
+                                stringByReplacingOccurrencesOfString: @" " withString: @""];
+    NSLog(@"手动获取推送deviceToken：%@", uMengPushToken);
+    [UserDefaultUtil saveValue:uMengPushToken forKey:UMENGPUSH_DIVICETOKEN];
+}
+//iOS10新增：处理前台收到通知的代理方法
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler __IOS_AVAILABLE(10.0) __TVOS_AVAILABLE(10.0) __WATCHOS_AVAILABLE(3.0){
+    NSDictionary *userInfo = notification.request.content.userInfo;
+    if([notification.request.trigger isKindOfClass:[UNPushNotificationTrigger class]]) {
+        //应用处于前台时的远程推送接受
+        //关闭U-Push自带的弹出框
+        [UMessage setAutoAlert:NO];
+//        [KNotificationCenter postNotificationName:PUSH_POSTINFO object:self userInfo:userInfo];
+        //必须加这句代码
+        [UMessage didReceiveRemoteNotification:userInfo];
+        
+    }else{
+        //应用处于前台时的本地推送接受
+    }
+    //当应用处于前台时提示设置，需要哪个可以设置哪一个
+    completionHandler(UNNotificationPresentationOptionSound|UNNotificationPresentationOptionBadge|UNNotificationPresentationOptionAlert);
+}
+    
+    
+//iOS10新增：处理后台点击通知的代理方法
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void(^)(void))completionHandler __IOS_AVAILABLE(10.0) __WATCHOS_AVAILABLE(3.0) __TVOS_PROHIBITED{
+    
+    NSDictionary *userInfo = response.notification.request.content.userInfo;
+    if([response.notification.request.trigger isKindOfClass:[UNPushNotificationTrigger class]]) {
+        
+        //应用处于后台时的远程推送接受
+        dispatch_time_t delayTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0/*延迟执行时间*/ * NSEC_PER_SEC));
+        //这样操作会在mainVC先注册通知再发送通知  如果不延迟执行 会先发送通知 而还没注册通知 导致通知信息传递不过去
+        dispatch_after(delayTime, dispatch_get_main_queue(), ^{
+            [KNotificationCenter postNotificationName:PUSH_POSTINFO object:self userInfo:userInfo];
+
+        });
+        //必须加这句代码
+        [UMessage didReceiveRemoteNotification:userInfo];
+        
+    }else{
+        //应用处于后台时的本地推送接受
+    }
+}
+
+- (void)applicationWillResignActive:(UIApplication *)application {
+    // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
+    // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
+}
+
+
+- (void)applicationDidEnterBackground:(UIApplication *)application {
+
+    //    用GCD实现了 倒计时，进入后台计算就会停止，解决方法
+    UIApplication *app = [UIApplication sharedApplication];
+    __block    UIBackgroundTaskIdentifier bgTask;
+    bgTask = [app beginBackgroundTaskWithExpirationHandler:^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (bgTask != UIBackgroundTaskInvalid){
+                bgTask = UIBackgroundTaskInvalid;
+            }
+        });
+    }];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (bgTask != UIBackgroundTaskInvalid){
+                bgTask = UIBackgroundTaskInvalid;
+            }
+        });
+    });
+}
+
+
+- (void)applicationWillEnterForeground:(UIApplication *)application {
+    // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
+    [KNotificationCenter postNotificationName:@"deleteBlank" object:nil userInfo:nil];
+    
+    //从后台回到前台重新获取下时间戳
+    [HTTPManager getSystemTimeInfo:^(NSString *code, NSString *msg) {
+        
+    }];
+    
+    //检测是否有最新版本
+//    [HTTPManager checkAppVersion:^(NSString *code, NSString *msg, id result) {
+//        if (code.intValue == 200) {
+//
+//            [UserDefaultUtil saveBoolValue:[result[@"mandatory"] boolValue] forKey:IS_MANDATORY];
+//
+//            //=================版本更新 根据appid检测====================
+//            [[UpdateApp sharedManager] updateWithAPPID:APP_ID withBundleId:nil block:^(NSString *currentVersion, NSString *storeVersion, NSString *openUrl, BOOL isUpdate, NSString *updateContent) {
+//                if (isUpdate) {
+//                    [SELUpdateAlert showUpdateAlertWithVersion:storeVersion Description:updateContent update:openUrl];
+//                }else{
+//
+//                }
+//            }];
+//        }
+//    }];
+    
+}
+
+
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+}
+
+
+- (void)applicationWillTerminate:(UIApplication *)application {
+    // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+}
+
+
+@end

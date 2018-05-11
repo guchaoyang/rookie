@@ -1,0 +1,607 @@
+//
+//  Helper.m
+//  niuniu
+//
+//  Created by 成都牛牛优选信息科技有限公司 on 2017/4/21.
+//  Copyright © 2017年 成都牛牛优选信息科技有限公司. All rights reserved.
+//
+
+#import "Helper.h"
+#import <CommonCrypto/CommonDigest.h>
+#import <CommonCrypto/CommonCryptor.h>
+#import <Security/Security.h>
+//#import "GTMBase64.h"
+
+
+#import <sys/socket.h>
+#import <sys/sockio.h>
+#import <sys/ioctl.h>
+#import <net/if.h>
+#import <arpa/inet.h>
+
+@implementation Helper
+
+
+/**
+ * 单例初始化方法
+ * @return 返回Helper对象
+ */
++ (Helper *)sharedHelper{
+    
+    static dispatch_once_t predicate;
+    
+    static Helper *helper;
+    
+    dispatch_once(&predicate, ^{
+        
+        helper = [[Helper alloc] init];
+        
+    });
+    
+    return helper;
+}
+
+///判断是否有网络
++ (void)isHasNetWork:(void(^)(BOOL has))hasNet{
+    //创建网络监听对象
+    AFNetworkReachabilityManager *manager = [AFNetworkReachabilityManager sharedManager];
+    //开始监听
+    [manager startMonitoring];
+    //监听改变
+    [manager setReachabilityStatusChangeBlock:^(AFNetworkReachabilityStatus status) {
+        switch (status) {
+            case AFNetworkReachabilityStatusUnknown:
+            case AFNetworkReachabilityStatusNotReachable:
+                hasNet(NO);
+                break;
+            case AFNetworkReachabilityStatusReachableViaWWAN:
+            case AFNetworkReachabilityStatusReachableViaWiFi:
+                hasNet(YES);
+                break;
+        }
+    }];
+    //结束监听
+    [manager stopMonitoring];
+}
+
+/**
+ 适用于一个字符串中有两种颜色的 并且字体大小不一样的
+ @param lable Lable
+ @param titleString 内容
+ @param textFont 设置需要的字体大小
+ @param fontRang 字体大小的位置
+ @param textColor 字体颜色
+ @param range 字体颜色的位置
+ */
++ (void)setRichText:(UILabel *)lable titleString:(NSString *)titleString textFont:(UIFont *)textFont fontRang:(NSRange)fontRang textColor:(UIColor *)textColor colorRang:(NSRange)range{
+    
+    NSMutableAttributedString *Attributed = [[NSMutableAttributedString alloc] initWithString:titleString];
+    
+    [Attributed addAttribute:NSFontAttributeName value:textFont range:fontRang];
+    
+    [Attributed addAttribute:NSForegroundColorAttributeName value:textColor range:range];
+    
+    [lable setAttributedText:Attributed];
+}
+
+/**
+ *  判断字符串是否为空
+ *
+ *  @param string <#string description#>
+ *
+ *  @return <#return value description#>
+ */
++(BOOL)isNotBlankString:(id)string{
+    if (string == nil || string == NULL) {
+        
+        return NO;
+    }
+    if ([string isKindOfClass:[NSNull class]]) {
+        
+        return NO;
+    }
+    if ([string isKindOfClass:[NSString class]]) {
+        if ([[string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] length]==0) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+/**
+ * 动态计算文字的大小
+ *
+ */
++ (CGSize)calculateTheSizeOfTheText:(NSString *)text :(CGFloat)fontSize :(float)width{
+    CGSize nameSize = [text boundingRectWithSize:CGSizeMake(width, 2000) options:NSStringDrawingTruncatesLastVisibleLine | NSStringDrawingUsesFontLeading | NSStringDrawingUsesLineFragmentOrigin attributes:@{NSFontAttributeName:[UIFont systemFontOfSize:fontSize]} context:nil].size;
+    return nameSize;
+}
+
+/**
+ * 开启定时器累加毫秒数
+ *
+ */
++ (void)startTime :(long)millisecond{
+    
+    __block long timeout = millisecond; //倒计时时间
+    
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_source_t _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,queue);
+    dispatch_source_set_timer(_timer,dispatch_walltime(NULL, 0),5.0*NSEC_PER_SEC, 0); //每5s执行
+    dispatch_source_set_event_handler(_timer, ^{
+        
+        
+        if(timeout<=0){ //倒计时结束，关闭
+            dispatch_source_cancel(_timer);
+        }else{
+            
+            [BasicInfoClass shared].bgTimestamp = timeout;
+//            NSLog(@"时间 = %ld",[BasicInfoClass shared].bgTimestamp);
+            
+            timeout+=5000;
+        }
+    });
+    dispatch_resume(_timer);
+}
+
+/**
+ * 3DES加密
+ *
+ */
++ (NSString*)TripleDES:(NSString*)plainText :(NSInteger)encryptOrDecrypt{
+//    NSString *desKey = DES_KEY;     //得到3DES密钥desKey=key.substr(0,24)
+//    NSString *desIv  = DES_IV;    //得到3DES向量desIv=key.substr (24)
+    //将明文做3DES加密：encrypted=3des.encrypt(content,desKey,desIv)kCCDecrypt
+    
+    NSString* encrypted = [Helper TripleDES:plainText encryptOrDecrypt:encryptOrDecrypt==0?kCCEncrypt:kCCDecrypt key:DES_KEY desIv:DES_IV];
+    return encrypted;
+}
+
+//3DES加密，解密
++ (NSString*)TripleDES:(NSString*)plainText encryptOrDecrypt:(CCOperation)encryptOrDecrypt key:(NSString*)key desIv:(NSString*)desIv{
+    
+    const void *vplainText;
+    size_t plainTextBufferSize;
+    
+    if (encryptOrDecrypt == kCCDecrypt){
+        //解密
+        //        NSData *EncryptData = [GTMBase64 decodeData:[plainText dataUsingEncoding:NSUTF8StringEncoding]];
+        NSData* EncryptData = [[NSData alloc] initWithBase64EncodedString:plainText options:0];//使用系统自带编码库
+        plainTextBufferSize = [EncryptData length];
+        vplainText = [EncryptData bytes];
+        
+    }else{
+        //加密
+        NSData* data = [plainText dataUsingEncoding:NSUTF8StringEncoding];
+        plainTextBufferSize = [data length];
+        vplainText = (const void *)[data bytes];
+    }
+    
+    // CCCryptorStatus ccStatus;
+    uint8_t *bufferPtr = NULL;
+    size_t bufferPtrSize = 0;
+    size_t movedBytes = 0;
+    //uint8_t ivkCCBlockSize3DES;
+    
+    bufferPtrSize = (plainTextBufferSize + kCCBlockSize3DES) & ~(kCCBlockSize3DES - 1);
+    bufferPtr = malloc( bufferPtrSize * sizeof(uint8_t));
+    memset((void *)bufferPtr, 0x0, bufferPtrSize);
+    
+    const void *vkey = (const void *) [key UTF8String];
+    const void *vinitVec = (const void *) [desIv UTF8String] ;
+    
+    CCCrypt(encryptOrDecrypt,//加密还是解密
+            kCCAlgorithm3DES,//算法类型 3DES 
+            kCCOptionPKCS7Padding,//密码块的设置选项
+            vkey,//秘钥
+            kCCKeySize3DES,//秘钥的长度
+            vinitVec,//偏移量 不用的话，必须为nil,不可以为@“”
+            vplainText,//加解密内容的字节
+            plainTextBufferSize, //加解密内容的长度
+            (void *)bufferPtr,// output data buffer 输出数据缓冲区
+            bufferPtrSize,// output data length available 输出数据长度
+            &movedBytes);// real output data length 实际数据长度
+    
+    NSString *result;
+    
+    if (encryptOrDecrypt == kCCDecrypt){
+        //解密
+        result = [[NSString alloc] initWithData:[NSData dataWithBytes:(const void *)bufferPtr
+                                                               length:(NSUInteger)movedBytes]
+                                    encoding:NSUTF8StringEncoding];
+    }else{
+        //加密
+        NSData *myData = [NSData dataWithBytes:(const void *)bufferPtr length:(NSUInteger)movedBytes];
+        //        result = [GTMBase64 stringByEncodingData:myData];
+        result = [myData base64EncodedStringWithOptions:NSDataBase64EncodingEndLineWithLineFeed];//使用系统自带编码库
+    }
+    free(bufferPtr);
+    return result;
+}
+
+/**
+ * MD5加密32位小写
+ *
+ */
++ (NSString *)md532BitLower:(NSString *)str{
+    
+    const char *cStr = [str UTF8String];
+    
+    unsigned char result[16];
+    
+    CC_MD5(cStr, (CC_LONG)strlen(cStr), result); // This is the md5 call
+    
+    NSString * md5Str = [[NSString stringWithFormat:
+                         
+                         @"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                         
+                         result[0], result[1], result[2], result[3],
+                         
+                         result[4], result[5], result[6], result[7],
+                         
+                         result[8], result[9], result[10], result[11],
+                         
+                         result[12], result[13], result[14], result[15]
+                         
+                         ] lowercaseString];
+    
+    NSLog(@"经过MD5加密的字符串：%@",md5Str);
+    
+    return md5Str;
+}
+
+
+
+/**
+ * 获取当前的时间戳
+ *
+ */
++ (NSString*) timeStamp{
+    NSTimeInterval timeStamp = [[NSDate date] timeIntervalSince1970];
+//    return [NSNumber numberWithUnsignedInt:(unsigned int)timeStamp];
+    return [NSString stringWithFormat:@"%.0f",timeStamp];
+}
+
+/**
+ * 获取14位时间戳（20170515111150）
+ *
+ */
++ (NSString *)fourteenBitsTimeStamp{
+    
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"YYYYMMddHHmmss"];
+    
+    NSDate *datenow = [NSDate date];
+    NSString *currentTimeString = [formatter stringFromDate:datenow];
+    
+    return currentTimeString;
+}
+
+/**
+ * 获取当前日期（2017-05-15）
+ *
+ */
++ (NSString *)currentDate{
+    
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"YYYY-MM-dd"];
+    
+    NSDate *datenow = [NSDate date];
+    NSString *currentTimeString = [formatter stringFromDate:datenow];
+    
+    return currentTimeString;
+}
+
+/**
+ * 转换成天时分秒
+ *
+ */
+
++ (NSString *)timeFormatted:(int)totalSeconds{
+    
+//    int days = totalSeconds / 86400;
+    int hours = totalSeconds / 3600;
+    int minutes = (totalSeconds / 60) % 60;
+    int seconds = totalSeconds % 60;
+    
+    return [NSString stringWithFormat:@"%02d时%02d分%02d秒", hours, minutes, seconds];
+}
+
+/**
+* JSON字符串转化为字典
+*
+*/
++ (NSDictionary *)dictionaryWithJsonString:(NSString *)jsonString
+{
+    if (jsonString == nil) {
+        return nil;
+    }
+    
+    NSData *jsonData = [jsonString dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *err;
+    NSDictionary *dic = [NSJSONSerialization JSONObjectWithData:jsonData
+                                                        options:NSJSONReadingMutableContainers
+                                                          error:&err];
+    if(err)
+    {
+        NSLog(@"json解析失败：%@",err);
+        return nil;
+    }
+    return dic;
+}
+
+/**
+ * 获取用户ip地址
+ *
+ */
++ (NSString *)getDeviceIPIpAddresses{
+    
+    NSURL *ipURL = [NSURL URLWithString:@"http://ip.taobao.com/service/getIpInfo.php?ip=myip"];
+    NSData *data = [NSData dataWithContentsOfURL:ipURL];
+    NSDictionary *ipDic = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:nil];
+    
+    NSString *ipStr = nil;
+    if (ipDic && [ipDic[@"code"] integerValue] == 0) { //获取成功
+        ipStr = ipDic[@"data"][@"ip"];
+    }
+    return (ipStr ? ipStr : @"");
+}
+
+/**
+ * 设置状态栏颜色
+ *
+ */
++ (void)setStatusBarBackgroundColor:(UIColor *)color{
+    
+    UIView *statusBar = [[[UIApplication sharedApplication] valueForKey:@"statusBarWindow"] valueForKey:@"statusBar"];
+    if ([statusBar respondsToSelector:@selector(setBackgroundColor:)]) {
+        statusBar.backgroundColor = color;
+    }
+}
+
+/**
+ *  判断字符串中是否存在emoji
+ * @param string 字符串
+ * @return YES(含有表情)
+ */
++ (BOOL)stringContainsEmoji:(NSString *)string {
+    
+    __block BOOL returnValue = NO;
+    
+    [string enumerateSubstringsInRange:NSMakeRange(0, [string length]) options:NSStringEnumerationByComposedCharacterSequences usingBlock:
+     ^(NSString *substring, NSRange substringRange, NSRange enclosingRange, BOOL *stop) {
+         
+         const unichar hs = [substring characterAtIndex:0];
+         // surrogate pair
+         if (0xd800 <= hs && hs <= 0xdbff) {
+             if (substring.length > 1) {
+                 const unichar ls = [substring characterAtIndex:1];
+                 const int uc = ((hs - 0xd800) * 0x400) + (ls - 0xdc00) + 0x10000;
+                 if (0x1d000 <= uc && uc <= 0x1f77f) {
+                     returnValue = YES;
+                 }
+             }
+         } else if (substring.length > 1) {
+             const unichar ls = [substring characterAtIndex:1];
+             if (ls == 0x20e3) {
+                 returnValue = YES;
+             }
+             
+         } else {
+             // non surrogate
+             if (0x2100 <= hs && hs <= 0x27ff) {
+                 returnValue = YES;
+             } else if (0x2B05 <= hs && hs <= 0x2b07) {
+                 returnValue = YES;
+             } else if (0x2934 <= hs && hs <= 0x2935) {
+                 returnValue = YES;
+             } else if (0x3297 <= hs && hs <= 0x3299) {
+                 returnValue = YES;
+             } else if (hs == 0xa9 || hs == 0xae || hs == 0x303d || hs == 0x3030 || hs == 0x2b55 || hs == 0x2b1c || hs == 0x2b1b || hs == 0x2b50) {
+                 returnValue = YES;
+             }
+         }
+     }];
+    
+    return returnValue;
+}
+
+/**
+ * 字符串生成二维码
+ *
+ */
++ (UIImage *)createNonInterpolatedUIImageFormCIImage:(CIImage *)image withSize:(CGFloat)size{
+    CGRect extent = CGRectIntegral(image.extent);
+    CGFloat scale = MIN(size/CGRectGetWidth(extent), size/CGRectGetHeight(extent));
+    // 1.创建bitmap;
+    size_t width = CGRectGetWidth(extent) * scale;
+    size_t height = CGRectGetHeight(extent) * scale;
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceGray();
+    CGContextRef bitmapRef = CGBitmapContextCreate(nil, width, height, 8, 0, cs, (CGBitmapInfo)kCGImageAlphaNone);
+    CIContext *context = [CIContext contextWithOptions:nil];
+    CGImageRef bitmapImage = [context createCGImage:image fromRect:extent];
+    CGContextSetInterpolationQuality(bitmapRef, kCGInterpolationNone);
+    CGContextScaleCTM(bitmapRef, scale, scale);
+    CGContextDrawImage(bitmapRef, extent, bitmapImage);
+    // 2.保存bitmap到图片
+    CGImageRef scaledImage = CGBitmapContextCreateImage(bitmapRef);
+    CGContextRelease(bitmapRef);
+    CGImageRelease(bitmapImage);
+    return [UIImage imageWithCGImage:scaledImage];
+}
+
+/**
+ * 1.生成请求头auth (时间戳+Bearer+token)
+ * 2.3DES加密
+ */
++ (NSString *)createRequestHeadString{
+    NSString *auth = [NSString stringWithFormat:@"%ldBearer%@",[BasicInfoClass shared].bgTimestamp, [UserDefaultUtil valueForKey:USER_TOKEN]];
+    NSString *DESString = [self TripleDES:auth :0];//加密
+    return DESString;
+}
+
+#pragma mark - 正则匹配手机号
++ (BOOL)checkTelNumber:(NSString *) mobile
+{
+//    NSString *pattern = @"^1(3[0-9]|5[0-35-9]|8[025-9])\\d{8}$";
+//    ^((13[0-9])|(15[^4])|(166)|(17[0-8])|(18[0-9])|(19[8-9])|(147,145))\d{8}$
+//    NSPredicate *pred = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", pattern];
+//    BOOL isMatch = [pred evaluateWithObject:telNumber];
+//    return isMatch;
+    
+    mobile = [mobile stringByReplacingOccurrencesOfString:@" " withString:@""];
+    
+    if (mobile.length != 11){
+        return NO;
+    }else{
+        /**
+         * 移动号段正则表达式 198
+         */
+        NSString *CM_NUM = @"^((13[4-9])|(147)|(15[0-2,7-9])|(178)|(198)|(18[2-4,7-8]))\\d{8}|(1705)\\d{7}$";
+        
+        /**
+         * 联通号段正则表达式 新增加 171虚拟号段
+         */
+        NSString *CU_NUM = @"^((13[0-2])|(145)|(15[5-6])|(171)|(176)|(18[5,6]))\\d{8}|(1709)\\d{7}$";
+        
+        /**
+         * 电信号段正则表达式 199
+         */
+        
+        NSString *CT_NUM = @"^((133)|(153)|(177)|(199)|(18[0,1,9]))\\d{8}$";
+        
+        NSPredicate *pred1 = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", CM_NUM];
+        
+        BOOL isMatch1 = [pred1 evaluateWithObject:mobile];
+        
+        NSPredicate *pred2 = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", CU_NUM];
+        
+        BOOL isMatch2 = [pred2 evaluateWithObject:mobile];
+        
+        NSPredicate *pred3 = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", CT_NUM];
+        
+        BOOL isMatch3 = [pred3 evaluateWithObject:mobile];
+        
+        if (isMatch1 || isMatch2 || isMatch3) {
+            
+            return YES;
+            
+        }else{
+            
+            return NO;
+            
+        }
+    }
+}
+
+#pragma 正则匹配用户密码6-18位数字和字母组合
++ (BOOL)checkPassword:(NSString *) password
+{
+    NSString *pattern = @"^(?![0-9]+$)(?![a-zA-Z]+$)[a-zA-Z0-9]{6,18}";
+    NSPredicate *pred = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", pattern];
+    BOOL isMatch = [pred evaluateWithObject:password];
+    return isMatch;
+    
+}
+#pragma 正则匹配用户姓名,20位的中文或英文
++ (BOOL)checkUserName : (NSString *) userName
+{
+    NSString *pattern = @"^[a-zA-Z一-龥]{1,20}";
+    NSPredicate *pred = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", pattern];
+    BOOL isMatch = [pred evaluateWithObject:userName];
+    return isMatch;
+    
+}
+#pragma 正则匹配用户身份证号15或18位
++ (BOOL)checkUserIdCard: (NSString *) idCard
+{
+    BOOL flag;
+    if (idCard.length <= 0) {
+        flag = NO;
+        return flag;
+    }
+    NSString *regex2 =@"^(^[1-9]\\d{7}((0\\d)|(1[0-2]))(([0|1|2]\\d)|3[0-1])\\d{3}$)|(^[1-9]\\d{5}[1-9]\\d{3}((0\\d)|(1[0-2]))(([0|1|2]\\d)|3[0-1])((\\d{4})|\\d{3}[Xx])$)$";
+    NSPredicate *identityCardPredicate = [NSPredicate predicateWithFormat:@"SELF MATCHES %@",regex2];
+    return [identityCardPredicate evaluateWithObject:idCard];
+    
+}
+#pragma 正则匹配邮箱
++ (BOOL) checkUserEmail:(NSString *)email
+{
+    NSString *emailRegex = @"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,4}";
+    NSPredicate *emailTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", emailRegex];
+    return [emailTest evaluateWithObject:email];
+}
+#pragma 正则匹配银行卡号
++ (BOOL)checkUserBankNumber:(NSString *)BankNumber{
+    NSString *regex2 =@"^\\d{16,19}$|^\\d{6}[- ]\\d{10,13}$|^\\d{4}[- ]\\d{4}[- ]\\d{4}[- ]\\d{4,7}$";
+    NSPredicate *identityCardPredicate = [NSPredicate predicateWithFormat:@"SELF MATCHES %@",regex2];
+    return [identityCardPredicate evaluateWithObject:BankNumber];
+    
+}
+
+#pragma 正则匹配用验证身份证户身份证号15或18位
+
++ (BOOL) validateIdentityCard: (NSString *)value
+{
+    value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([value length] != 18) {
+        return NO;
+    }
+    NSString *mmdd = @"(((0[13578]|1[02])(0[1-9]|[12][0-9]|3[01]))|((0[469]|11)(0[1-9]|[12][0-9]|30))|(02(0[1-9]|[1][0-9]|2[0-8])))";
+    NSString *leapMmdd = @"0229";
+    NSString *year = @"(19|20)[0-9]{2}";
+    NSString *leapYear = @"(19|20)(0[48]|[2468][048]|[13579][26])";
+    NSString *yearMmdd = [NSString stringWithFormat:@"%@%@", year, mmdd];
+    NSString *leapyearMmdd = [NSString stringWithFormat:@"%@%@", leapYear, leapMmdd];
+    NSString *yyyyMmdd = [NSString stringWithFormat:@"((%@)|(%@)|(%@))", yearMmdd, leapyearMmdd, @"20000229"];
+    NSString *area = @"(1[1-5]|2[1-3]|3[1-7]|4[1-6]|5[0-4]|6[1-5]|82|[7-9]1)[0-9]{4}";
+    NSString *regex = [NSString stringWithFormat:@"%@%@%@", area, yyyyMmdd  , @"[0-9]{3}[0-9Xx]"];
+    
+    NSPredicate *regexTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", regex];
+    if (![regexTest evaluateWithObject:value]) {
+        return NO;
+    }
+    int summary = ([value substringWithRange:NSMakeRange(0,1)].intValue + [value substringWithRange:NSMakeRange(10,1)].intValue) *7 + ([value substringWithRange:NSMakeRange(1,1)].intValue + [value substringWithRange:NSMakeRange(11,1)].intValue) *9 + ([value substringWithRange:NSMakeRange(2,1)].intValue + [value substringWithRange:NSMakeRange(12,1)].intValue) *10 + ([value substringWithRange:NSMakeRange(3,1)].intValue + [value substringWithRange:NSMakeRange(13,1)].intValue) *5 + ([value substringWithRange:NSMakeRange(4,1)].intValue + [value substringWithRange:NSMakeRange(14,1)].intValue) *8 + ([value substringWithRange:NSMakeRange(5,1)].intValue + [value substringWithRange:NSMakeRange(15,1)].intValue) *4 + ([value substringWithRange:NSMakeRange(6,1)].intValue + [value substringWithRange:NSMakeRange(16,1)].intValue) *2 + [value substringWithRange:NSMakeRange(7,1)].intValue *1 + [value substringWithRange:NSMakeRange(8,1)].intValue *6 + [value substringWithRange:NSMakeRange(9,1)].intValue *3;
+    NSInteger remainder = summary % 11;
+    NSString *checkBit = @"";
+    NSString *checkString = @"10X98765432";
+    checkBit = [checkString substringWithRange:NSMakeRange(remainder,1)];// 判断校验位
+    return [checkBit isEqualToString:[[value substringWithRange:NSMakeRange(17,1)] uppercaseString]];
+}
+
+/**清除缓存和cookie*/
++ (void)cleanCacheAndCookie{
+    //清除cookies
+    NSHTTPCookie *cookie;
+    NSHTTPCookieStorage *storage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
+    for (cookie in [storage cookies]){
+        [storage deleteCookie:cookie];
+    }
+    //清除UIWebView的缓存
+    [[NSURLCache sharedURLCache] removeAllCachedResponses];
+    NSURLCache * cache = [NSURLCache sharedURLCache];
+    [cache removeAllCachedResponses];
+    [cache setDiskCapacity:0];
+    [cache setMemoryCapacity:0];
+}
+
+/**
+ *  清理本地缓存的文件
+ */
++ (void)clearLocalCaches{
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSString *path = NSHomeDirectory();
+    path = [path stringByAppendingPathComponent:@"Library/Caches"];
+    
+    NSDirectoryEnumerator *enumerator =[fileManager enumeratorAtPath:path];
+    for (NSString *fileName in enumerator)
+    {
+        NSString *filePath = [path stringByAppendingPathComponent:fileName];
+        
+        [fileManager removeItemAtPath:filePath error:nil];
+        
+    }
+}
+
+@end

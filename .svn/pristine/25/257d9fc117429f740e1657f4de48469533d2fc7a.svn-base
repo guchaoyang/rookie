@@ -1,0 +1,342 @@
+//
+//  ShareViewController.m
+//  shopping
+//
+//  Created by 谷朝阳 on 2017/12/27.
+//  Copyright © 2017年 GCY. All rights reserved.
+//
+
+#import "ShareViewController.h"
+
+#import <UShareUI/UShareUI.h>
+
+//static NSString* const UMS_Title = @"【友盟+】社会化组件U-Share";
+//static NSString* const UMS_THUMB_IMAGE = @"https://mobile.umeng.com/images/pic/home/social/img-1.png";
+//static NSString* const UMS_Web_Desc = @"W欢迎使用【友盟+】社会化组件U-Share，SDK包最小，集成成本最低，助力您的产品开发、运营与推广！";
+//static NSString* const UMS_WebLink = @"https://bbs.umeng.com/";
+//static NSString* const UMS_IMAGE = @"https://mobile.umeng.com/images/pic/home/social/img-1.png";
+
+
+@interface ShareViewController ()
+
+@property (nonatomic, assign) UMSocialPlatformType platform;
+
+@property (nonatomic, strong) UIView               *whiteView;
+
+@property (nonatomic, strong) UIView               *blackView;
+
+@property (nonatomic, strong) UILabel              *textLabel;
+
+@property (nonatomic, strong) UIImageView          *QRCodeimageView;//二维码图片
+
+@property (nonatomic, copy)   NSString             *codeUrlStr;//分享链接URL
+
+@property (nonatomic, copy)   NSString             *imageUrlStr;//分享图片链接
+
+@end
+
+@implementation ShareViewController
+
+- (void)viewWillAppear:(BOOL)animated{
+    [super viewWillAppear:animated];
+    
+    [self.navigationController.navigationBar setBackgroundImage:[UIImage createImageWithColor:[UIColor whiteColor] frame:self.navigationController.navigationBar.bounds] forBarMetrics:UIBarMetricsDefault];
+    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleDefault;
+    
+}
+
+- (void)viewWillDisappear:(BOOL)animated{
+    [super viewWillDisappear:animated];
+    
+    [self.navigationController.navigationBar setBackgroundImage:image(@"home_img_navBackground") forBarMetrics:UIBarMetricsDefault];
+    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleLightContent;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+    self.view.backgroundColor = BackgroundColor;
+    
+    _codeUrlStr = @"";
+    
+    _imageUrlStr = @"";
+    
+    [self createNavigationItem];
+    
+    [self layoutView];
+    
+    [self getShareLinkRequest];//获取分享连接
+    
+    [self getShareImageRequest];//获取分享图片
+    
+}
+
+#pragma mark - 获取分享链接request
+- (void)getShareLinkRequest{
+    
+    [HTTPManager getShareUrl:^(NSString *code, NSString *msg, id result) {
+        if (code.intValue == 200) {
+            _codeUrlStr = result;
+            
+        }else if (code.intValue == 401){
+            
+        }else{
+            [XSInfoView showInfo:msg onView:self.view];
+        }
+    }];
+}
+
+#pragma mark - 获取分享图片request
+- (void)getShareImageRequest{
+    
+    [HTTPManager getShareNetImage:^(NSString *code, NSString *msg, id result) {
+        
+        if (code.intValue == 200) {
+            _imageUrlStr = result;
+        }else if (code.intValue == 401){
+            
+        }else{
+            [XSInfoView showInfo:msg onView:self.view];
+        }
+        
+    }];
+}
+
+- (void)createNavigationItem{
+    
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 100, 44)];
+    title.text = @"分享APP";
+    title.textAlignment = NSTextAlignmentCenter;
+    title.textColor = Dark_TextColor;
+    self.navigationItem.titleView = title;
+    
+    //导航返回按钮
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    backBtn.tag = 100;
+    backBtn.frame = CGRectMake(0, 0, 30, 30);
+    //图片左移
+    [backBtn setContentEdgeInsets:UIEdgeInsetsMake(0, 0, 0, 15)];
+    [backBtn addTarget:self action:@selector(backClick) forControlEvents:UIControlEventTouchUpInside];
+    [backBtn setImage:image(NAV_BACKBTN_NAME) forState:UIControlStateNormal];
+    UIBarButtonItem *left = [[UIBarButtonItem alloc]initWithCustomView:backBtn];
+    self.navigationItem.leftBarButtonItem = left;
+    
+}
+
+- (void)layoutView{
+    
+    __weak typeof(self) weakSelf = self;//防止循环引用
+    
+    UIImageView *backGroundImg = [[UIImageView alloc] init];
+    backGroundImg.image = image(@"activity_img_shareBackImg");
+    backGroundImg.userInteractionEnabled = YES;
+    [weakSelf.view addSubview:backGroundImg];
+    
+    [backGroundImg mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.left.bottom.right.equalTo(weakSelf.view);
+    }];
+    
+    //创建分享项
+    NSArray *btnTitles = @[@"发送给QQ好友",@"发送到QQ空间",@"发送到微信好友",@"发送到微信朋友圈",@"复制推广链接",@"面对面推广"];
+    NSArray *btnImages = @[@"img_share_qqFriends",@"img_share_Qzone",@"img_share_wechat",@"img_share_moments",@"mg_share_link",@"img_share_faceToface"];
+    for (int i=0; i<6; i++) {
+        UIButton *allButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        allButton.tag = 200+i;
+        [allButton setTitle:btnTitles[i] forState:UIControlStateNormal];
+        [allButton setImage:image(btnImages[i]) forState:UIControlStateNormal];
+        allButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+        allButton.titleLabel.font = font(16);
+        allButton.titleLabel.adjustsFontSizeToFitWidth = YES;
+        [allButton setBackgroundColor:[UIColor clearColor]];
+        [allButton setTitleColor:Dark_TextColor forState:UIControlStateNormal];
+        [allButton addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+        [backGroundImg addSubview:allButton];
+        
+        [allButton layoutButtonWithEdgeInsetsStyle:MKButtonEdgeInsetsStyleLeft imageTitleSpace:25];
+        
+        [allButton mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.mas_equalTo(90*SProportion_Width);
+            make.top.mas_equalTo(60*SProportion_Height + 60*SProportion_Height*i);
+            make.size.mas_equalTo(CGSizeMake(180*SProportion_Width, 30*SProportion_Height));
+        }];
+    }
+}
+
+- (void)backClick{
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)buttonClick:(UIButton *)button{
+    if (button.tag == 200){
+        //QQ好友
+        self.platform = UMSocialPlatformType_QQ;
+    }else if (button.tag == 201){
+        //QQ空间
+        self.platform = UMSocialPlatformType_Qzone;
+    }else if (button.tag == 202){
+        //微信好友
+        self.platform = UMSocialPlatformType_WechatSession;
+    }else if (button.tag == 203){
+        //朋友圈
+        self.platform = UMSocialPlatformType_WechatTimeLine;
+    }else if (button.tag == 204){
+        //复制链接
+        
+        UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
+        pasteboard.string = _codeUrlStr;
+        [XSInfoView showInfo:@"推广链接已复制到粘贴板" onView:self.view];
+        
+        return;
+    }else if (button.tag == 205){
+        //面对面推广 生成二维码
+        
+        self.blackView.hidden = NO;
+        self.whiteView.hidden = NO;
+        self.QRCodeimageView.hidden = NO;
+        self.textLabel.hidden = NO;
+        
+        return;
+    }
+    
+    //只分享网络图片（暂定）
+    //创建分享消息对象
+    UMSocialMessageObject *messageObject = [UMSocialMessageObject messageObject];
+    //创建图片内容对象
+    UMShareImageObject *shareObject = [[UMShareImageObject alloc] init];
+    //如果有缩略图，则设置缩略图
+//    shareObject.thumbImage = UMS_THUMB_IMAGE;
+    [shareObject setShareImage:_imageUrlStr];
+    //分享消息对象设置分享内容对象
+    messageObject.shareObject = shareObject;
+    //调用分享接口
+    [[UMSocialManager defaultManager] shareToPlatform:self.platform messageObject:messageObject currentViewController:self completion:^(id data, NSError *error) {
+        if (error) {
+            UMSocialLogInfo(@"************Share fail with error %@*********",error);
+        }else{
+            if ([data isKindOfClass:[UMSocialShareResponse class]]) {
+                UMSocialShareResponse *resp = data;
+                //分享结果消息
+                UMSocialLogInfo(@"response message is %@",resp.message);
+                //第三方原始返回的数据
+                UMSocialLogInfo(@"response originalResponse data is %@",resp.originalResponse);
+                
+            }else{
+                UMSocialLogInfo(@"response data is %@",data);
+            }
+        }
+        [self alertWithError:error];
+    }];
+}
+
+- (void)alertWithError:(NSError *)error
+{
+    NSString *result = nil;
+    if (!error) {
+        result = [NSString stringWithFormat:@"分享成功"];
+    }
+    else{
+        NSMutableString *str = [NSMutableString string];
+        if (error.userInfo) {
+            for (NSString *key in error.userInfo) {
+                [str appendFormat:@"%@ = %@\n", key, error.userInfo[key]];
+            }
+        }
+        if (error) {
+            result = [NSString stringWithFormat:@"分享失败,错误原因: %d\n%@",(int)error.code, str];
+        }
+        else{
+            result = [NSString stringWithFormat:@"分享失败"];
+        }
+    }
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"分享警告"
+                                                    message:result
+                                                   delegate:nil
+                                          cancelButtonTitle:NSLocalizedString(@"sure", @"确定")
+                                          otherButtonTitles:nil];
+    [alert show];
+}
+
+- (void)tapClick{
+    self.blackView.hidden = YES;
+    self.whiteView.hidden = YES;
+}
+
+#pragma mark - lazyLoading
+
+- (UIView *)whiteView{
+    if (!_whiteView) {
+        _whiteView = [[UIView alloc] initWithFrame:CGRectMake(20*SProportion_Width, 100*SProportion_Height, 280*SProportion_Width, 320*SProportion_Height)];
+        _whiteView.backgroundColor = [UIColor whiteColor];
+        cut(_whiteView, 5);
+        //        _whiteView.hidden = YES;
+        [self.view addSubview:_whiteView];
+    }
+    return _whiteView;
+}
+
+- (UIView *)blackView{
+    if (!_blackView) {
+        _blackView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, Screen_Width, Screen_Height)];
+        _blackView.backgroundColor = [UIColor blackColor];
+        _blackView.alpha = 0.8f;
+        _blackView.userInteractionEnabled = YES;
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapClick)];
+        [_blackView addGestureRecognizer:tap];
+        [self.view addSubview:_blackView];
+    }
+    return _blackView;
+}
+
+- (UILabel *)textLabel{
+    if (!_textLabel) {
+        _textLabel = [[UILabel alloc] initWithFrame:CGRectMake(20*SProportion_Width, 260*SProportion_Width, 240*SProportion_Width, 35*SProportion_Height)];
+        _textLabel.textColor = Dark_TextColor;
+        _textLabel.text = @"扫描这个二维码注册成功后，他（她）将成为你的被邀请人。";
+        _textLabel.font = font(13);
+        _textLabel.numberOfLines = 0;
+        _textLabel.textAlignment = NSTextAlignmentCenter;
+        [self.whiteView addSubview:_textLabel];
+    }
+    return _textLabel;
+}
+
+- (UIImageView *)QRCodeimageView{
+    if (!_QRCodeimageView) {
+        _QRCodeimageView = [[UIImageView alloc] initWithFrame:CGRectMake(20*SProportion_Width, 20*SProportion_Height, 240*SProportion_Width, 240*SProportion_Width)];
+        //1. 创建一个二维码滤镜实例(CIFilter)
+        CIFilter *filter = [CIFilter filterWithName:@"CIQRCodeGenerator"];
+        //滤镜恢复默认设置
+        [filter setDefaults];
+        //2. 给滤镜添加数据
+//        NSString *string = [NSString stringWithFormat:@"http://www.niuniujf.com//Public/register/invite_userid/%@?from=singlemessage&isappinstalled=1",[UserDefaultUtil valueForKey:@"token"]];
+        NSData *data = [_codeUrlStr dataUsingEncoding:NSUTF8StringEncoding];
+        [filter setValue:data forKeyPath:@"inputMessage"];
+        // 3. 生成二维码
+        CIImage *image = [filter outputImage];
+        
+        UIImage *resultImage = [Helper createNonInterpolatedUIImageFormCIImage:image withSize:200*SProportion_Width];
+        // 4. 显示二维码
+        //        self.imageView.image = [UIImage imageWithCIImage:image];
+        _QRCodeimageView.image = resultImage;
+        //        _imageView.hidden = YES;
+        [self.whiteView addSubview:_QRCodeimageView];
+    }
+    return _QRCodeimageView;
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+/*
+#pragma mark - Navigation
+
+// In a storyboard-based application, you will often want to do a little preparation before navigation
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    // Get the new view controller using [segue destinationViewController].
+    // Pass the selected object to the new view controller.
+}
+*/
+
+@end

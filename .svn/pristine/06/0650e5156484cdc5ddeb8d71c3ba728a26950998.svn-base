@@ -1,0 +1,756 @@
+//
+//  GoodsDetailViewController.m
+//  shopping
+//
+//  Created by 谷朝阳 on 2017/12/14.
+//  Copyright © 2017年 GCY. All rights reserved.
+//
+
+#import "GoodsDetailViewController.h"
+#import "RegisterViewController.h"
+#import <WebKit/WebKit.h>//使用WKWebView效率更高
+#import "UIImage+Tools.h"
+#import "ShareEarnViewController.h"//分享赚
+#import <AlibcTradeSDK/AlibcTradeSDK.h>
+
+#define NAVBAR_COLORCHANGE_POINT (IMAGE_HEIGHT - NAV_HEIGHT*2)
+#define IMAGE_HEIGHT 220
+#define NAV_HEIGHT 64
+#define WTKCOLOR(r, g, b, a) [UIColor colorWithRed:(r)/255.0 green:(g)/255.0 blue:(b)/255.0 alpha:(a)]
+
+@interface GoodsDetailViewController ()<UIScrollViewDelegate, UIWebViewDelegate>
+{
+    UILabel   *_goodsNameLabel;//名称
+    UILabel   *_goodsAboutLabel;//简介
+    UILabel   *_goodsPriceLabel;//价格
+    UILabel   *_goodsCouponPriceLabel;//优惠券价格
+    UILabel   *_goodsBuyNumLabel;//销量
+    NSString  *_taobaoCouponAddress; //淘宝领取优惠券地址
+    NSString  *_taobaoProductId; //淘宝商品ID
+    NSInteger _webViewHeight;//加载商品图片时 web的高度
+    NSDictionary *_goodsInfoDic;
+    BOOL      _isOpen;//记录商品的图片内容区域是否被展开
+    BOOL      _isCollRequesting;//收藏请求是否结束 防止重复点击
+    BOOL      _collectionType;//是否为合伙人
+    MBProgressHUD *_hud;
+
+}
+@property(nonatomic, strong)UIScrollView *scrollView;
+
+@property(nonatomic, strong)UIImageView  *goodsImageView;
+
+@property(nonatomic, strong)UIWebView    *webView;
+
+@end
+
+@implementation GoodsDetailViewController
+
+- (void)viewWillAppear:(BOOL)animated{
+    [super viewWillAppear:animated];
+    [MobClick beginLogPageView:@"GoodsDetailPage"];
+    
+    //显示分割线
+//    self.navigationController.navigationBar.translucent = NO;
+
+    self.navigationController.navigationBar.alpha = 0;
+    
+    [self.navigationController.navigationBar setBackgroundImage:[UIImage createImageWithColor:[UIColor whiteColor] frame:self.navigationController.navigationBar.bounds] forBarMetrics:UIBarMetricsDefault];
+    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleDefault;
+
+//    NSLog(@"self.navigationController.navigationBar.bounds%@",self.navigationController.navigationBar);
+    
+    if (TOKEN_ISEMPTY) {
+    }else{
+        //获取收藏相关
+        [self  getCollectionInfo:0];
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated{
+    [super viewWillDisappear:animated];
+    [MobClick endLogPageView:@"GoodsDetailPage"];
+
+    //隐藏分割线
+    self.navigationController.navigationBar.translucent = NO;
+
+    self.navigationController.navigationBar.alpha = 1;
+    //    如果不想让其他页面的导航栏变为透明 需要重置
+    
+    [self.navigationController.navigationBar setBackgroundImage:image(@"home_img_navBackground") forBarMetrics:UIBarMetricsDefault];
+    [UIApplication sharedApplication].statusBarStyle = UIStatusBarStyleLightContent;
+}
+
+- (void)dealloc{
+    
+    [KNotificationCenter removeObserver:self name:@"deleteBlank" object:nil];
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    [KNotificationCenter addObserver:self selector:@selector(notificationAction) name:@"deleteBlank" object:nil];
+    
+    [self createNavigationItem];
+
+    // 设置CGRectZero从导航栏下开始计算（如果不设置以下代码 在导航显示，收藏商品时scrollview会下移）
+//    if ([self respondsToSelector:@selector(setEdgesForExtendedLayout:)]) {
+//        self.edgesForExtendedLayout = UIRectEdgeNone;
+//    }
+//    _scrollView.contentInset = UIEdgeInsetsMake(20, 0, 0, 0);
+//    _scrollView.
+//
+    
+    self.view.backgroundColor = BackgroundColor;
+    _isOpen = NO;
+    _isCollRequesting = NO;
+    [self layoutView];
+
+}
+
+- (void)notificationAction{
+    
+    self.scrollView.contentOffset = CGPointMake(0, UI_IS_IPHONE_X?-44:-20);
+    
+}
+- (void)createNavigationItem{
+    
+    //导航返回按钮
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    backBtn.tag = 100;
+    backBtn.frame = CGRectMake(0, 0, 42, 42);
+    //图片左移
+    [backBtn setContentEdgeInsets:UIEdgeInsetsMake(0, 0, 0, 15)];
+    [backBtn addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+    [backBtn setImage:[UIImage imageNamed:NAV_BACKBTN_NAME] forState:UIControlStateNormal];
+    UIBarButtonItem *left = [[UIBarButtonItem alloc]initWithCustomView:backBtn];
+    self.navigationItem.leftBarButtonItem = left;
+
+    //收藏
+    UIButton *collectBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    collectBtn.tag = 650;
+    collectBtn.frame = CGRectMake(0, 0, 42, 42);
+    //图片左移
+    [collectBtn setContentEdgeInsets:UIEdgeInsetsMake(0, 0, 0, -15)];
+    [collectBtn addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+    [collectBtn setImage:[UIImage imageNamed:@"home_btn_goodsDetail_coll_second"] forState:UIControlStateNormal];
+    UIBarButtonItem *right = [[UIBarButtonItem alloc]initWithCustomView:collectBtn];
+    self.navigationItem.rightBarButtonItem = right;
+
+    
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 100, 44)];
+    title.text = @"商品详情";
+    title.textAlignment = NSTextAlignmentCenter;
+    title.textColor = Dark_TextColor;
+    self.navigationItem.titleView = title;
+}
+
+- (void)layoutView{
+    __weak typeof(self) weakSelf = self;//防止循环引用
+    
+//    _hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+//    _hud.detailsLabel.text = @"加载中";
+    
+    //商品名称
+    _goodsNameLabel = [[UILabel alloc] init];
+    _goodsNameLabel.text = @"------";
+    _goodsNameLabel.textAlignment = NSTextAlignmentLeft;
+    _goodsNameLabel.font = font(15);
+    _goodsNameLabel.numberOfLines = 0;
+    _goodsNameLabel.textColor = Dark_TextColor;
+    _goodsNameLabel.adjustsFontSizeToFitWidth = YES;
+    [self.scrollView addSubview:_goodsNameLabel];
+    
+    [_goodsNameLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(weakSelf.view).mas_offset(10);
+        make.right.equalTo(weakSelf.view).mas_offset(-10);
+        make.top.equalTo(self.goodsImageView.mas_bottom).mas_offset(5*SProportion_Height);
+        make.height.mas_equalTo(30*SProportion_Height);
+    }];
+    
+    //商品简介
+    _goodsAboutLabel = [[UILabel alloc] init];
+    _goodsAboutLabel.text = @"------";
+    _goodsAboutLabel.textAlignment = NSTextAlignmentLeft;
+    _goodsAboutLabel.font = font(15);
+    _goodsAboutLabel.numberOfLines = 0;
+    _goodsAboutLabel.textColor = [UIColor redColor];
+    _goodsAboutLabel.adjustsFontSizeToFitWidth = YES;
+    [self.scrollView addSubview:_goodsAboutLabel];
+    
+    [_goodsAboutLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.equalTo(_goodsNameLabel);
+        make.top.equalTo(_goodsNameLabel.mas_bottom).mas_offset(2*SProportion_Height);
+        make.height.mas_equalTo(40*SProportion_Height);
+    }];
+    
+    //券后价图片
+    UIImageView *couponPriceImage = [[UIImageView alloc] init];
+    couponPriceImage.image = image(@"home_img_priceTextLeft");
+    [self.scrollView addSubview:couponPriceImage];
+    
+    [couponPriceImage mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(_goodsNameLabel);
+        make.top.equalTo(_goodsAboutLabel.mas_bottom).mas_offset(5*SProportion_Height);
+        make.size.mas_equalTo(CGSizeMake(35*SProportion_Width, 15*SProportion_Height));
+    }];
+    
+    //价格
+    _goodsPriceLabel = [[UILabel alloc] init];
+    _goodsPriceLabel.text = @"￥--";
+    _goodsPriceLabel.textAlignment = NSTextAlignmentLeft;
+    _goodsPriceLabel.font = font(20);
+    _goodsPriceLabel.numberOfLines = 0;
+    _goodsPriceLabel.textColor = [UIColor redColor];
+    _goodsPriceLabel.adjustsFontSizeToFitWidth = YES;
+    [self.scrollView addSubview:_goodsPriceLabel];
+    
+    [_goodsPriceLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(couponPriceImage.mas_right).mas_offset(5*SProportion_Width);
+        make.top.equalTo(_goodsAboutLabel.mas_bottom).mas_offset(5*SProportion_Height);
+        make.size.mas_equalTo(CGSizeMake(60*SProportion_Width, 20*SProportion_Height));
+    }];
+    
+    //优惠券背景图片
+    UIImageView *couponImage = [[UIImageView alloc] init];
+    couponImage.image = image(@"home_img_couponBack");
+    [self.scrollView addSubview:couponImage];
+    
+    [couponImage mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(weakSelf.view).mas_offset(135*SProportion_Width);
+        make.top.equalTo(couponPriceImage);
+        make.size.mas_equalTo(CGSizeMake(50*SProportion_Width, 15*SProportion_Height));
+    }];
+    
+    //优惠券价格
+    _goodsCouponPriceLabel = [[UILabel alloc] init];
+    _goodsCouponPriceLabel.text = @"--元券";
+    _goodsCouponPriceLabel.textAlignment = NSTextAlignmentCenter;
+    _goodsCouponPriceLabel.font = font(14);
+    _goodsCouponPriceLabel.textColor = [UIColor whiteColor];
+    _goodsCouponPriceLabel.adjustsFontSizeToFitWidth = YES;
+    [couponImage addSubview:_goodsCouponPriceLabel];
+    
+    [_goodsCouponPriceLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.left.bottom.right.equalTo(couponImage);
+    }];
+    
+    //购买人数
+    _goodsBuyNumLabel = [[UILabel alloc] init];
+    _goodsBuyNumLabel.text = @"月销 ---";
+    _goodsBuyNumLabel.textAlignment = NSTextAlignmentRight;
+    _goodsBuyNumLabel.font = font(14);
+    _goodsBuyNumLabel.textColor = Light_TextColor;
+    _goodsBuyNumLabel.adjustsFontSizeToFitWidth = YES;
+    [self.scrollView addSubview:_goodsBuyNumLabel];
+    
+    [_goodsBuyNumLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.right.equalTo(_goodsNameLabel);
+        make.top.equalTo(_goodsAboutLabel.mas_bottom).mas_offset(5*SProportion_Height);
+        make.size.mas_equalTo(CGSizeMake(60*SProportion_Width, 20*SProportion_Height));
+    }];
+    
+    //图文详情 服务端返回的HTML字符串前边拼接上图片的样式
+    [self.webView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.equalTo(weakSelf.view);
+        make.top.equalTo(_goodsBuyNumLabel.mas_bottom).mas_offset(30*SProportion_Height);
+        make.height.mas_equalTo(0);
+    }];
+    
+    //点击展开收缩按钮
+    UIButton *openButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    openButton.tag = 500;
+    [openButton setBackgroundColor:BackgroundColor];
+//    openButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    [openButton setTitle:@"图文详情" forState:UIControlStateNormal];
+    [openButton setTitleColor:Light_TextColor forState:UIControlStateNormal];
+    openButton.titleLabel.font = [UIFont systemFontOfSize:13];
+    [openButton setImage:image(@"home_btn_goodsDetail_cache") forState:UIControlStateNormal];
+//    [openButton addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+    [self.scrollView addSubview:openButton];
+    
+    [openButton layoutButtonWithEdgeInsetsStyle:MKButtonEdgeInsetsStyleLeft imageTitleSpace:10*SProportion_Width];
+    
+    [openButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.equalTo(weakSelf.view);
+        make.top.equalTo(_goodsBuyNumLabel.mas_bottom).mas_offset(10*SProportion_Height);
+        make.height.mas_equalTo(20*SProportion_Height);
+    }];
+    
+    //导航隐藏时添加返回按钮
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    backBtn.tag = 100;
+    backBtn.frame = CGRectMake(15*SProportion_Width, UI_IS_IPHONE_X?55:31, 45, 45);
+    //图片左移
+    [backBtn setContentEdgeInsets:UIEdgeInsetsMake(-5, 0, 10, 15)];
+    [backBtn addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+    [backBtn setImage:[UIImage imageNamed:@"home_btn_goodsDetailBack"] forState:UIControlStateNormal];
+    [weakSelf.view addSubview:backBtn];
+    
+    //导航隐藏时添加收藏按钮
+    UIButton *collectionBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    collectionBtn.tag = 700;
+    collectionBtn.frame = CGRectMake(280*SProportion_Width, UI_IS_IPHONE_X?55:31, 42, 42);
+    //图片左移
+    [collectionBtn setContentEdgeInsets:UIEdgeInsetsMake(-5, 0, 10, 0)];
+    [collectionBtn addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+    [collectionBtn setImage:[UIImage imageNamed:@"home_btn_goodsDetail_collection"] forState:UIControlStateNormal];
+    [weakSelf.view addSubview:collectionBtn];
+    
+    //底部三个按钮
+    UIView *whiteView = [[UIView alloc] init];
+    whiteView.backgroundColor = [UIColor whiteColor];
+    [self.view addSubview:whiteView];
+    
+    [whiteView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.bottom.equalTo(weakSelf.view);
+        make.top.equalTo(weakSelf.view.mas_bottom).mas_offset(-40*SProportion_Height);
+    }];
+    
+    NSArray *titles = @[@"首页",@"分享赚",@"领券购买"];
+    
+    for (int i=0; i<3; i++) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.tag = 100+i;
+        [button setBackgroundColor:[UIColor whiteColor]];
+        [button setTitle:titles[i] forState:UIControlStateNormal];
+        [button setTitleColor:Dark_TextColor forState:UIControlStateNormal];
+        button.titleLabel.font = font(16);
+        [button addTarget:self action:@selector(buttonClick:) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:button];
+        
+        if (i==0) {
+            [button setImage:image(@"img_tabbar_home_selected") forState:UIControlStateNormal];
+            [button layoutButtonWithEdgeInsetsStyle:MKButtonEdgeInsetsStyleLeft imageTitleSpace:5*SProportion_Width];
+        }else if (i==1) {
+            [button setBackgroundImage:image(@"home_btn_goodsDetail_share") forState:UIControlStateNormal];
+            [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            if ([UserDefaultUtil boolValueForKey:IS_PARTNER] == NO) {
+                [button setTitle:@"收藏" forState:UIControlStateNormal];
+            }
+            
+        }else if (i==2){
+            [button setBackgroundImage:image(@"home_btn_goodsDetail_getCoupon") forState:UIControlStateNormal];
+            [button setBackgroundColor:Red_Color];
+            [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            
+        }
+        
+        [button mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.mas_offset(Screen_Width/3*i);
+            make.top.height.equalTo(whiteView);
+            make.width.mas_equalTo(Screen_Width/3);
+        }];
+    }
+
+    //获取商品详情
+    [self loadingData];
+    
+}
+
+#pragma mark - loadingData
+- (void)loadingData{
+    
+    [HTTPManager getGoodsDetailInfo:^(NSString *code, NSString *msg, NSDictionary *dic) {
+        if (code.intValue == 200) {
+            _goodsInfoDic = dic;
+            
+            NSString *httpsPicAddress = @"";
+            if ([dic[@"thumb"] rangeOfString:@"https"].location == NSNotFound){
+                httpsPicAddress = [dic[@"thumb"] stringByReplacingOccurrencesOfString:@"http" withString:@"https"];
+            }else{
+                httpsPicAddress = [dic objectForKey:@"thumb"];
+            }
+            setNetImage(self.goodsImageView, httpsPicAddress, @"home_img_godsDatil_plaHolder");
+            _goodsNameLabel.text = [dic objectForKey:@"title"];
+            _goodsAboutLabel.text = [dic objectForKey:@"description"];
+            _goodsPriceLabel.text = [NSString stringWithFormat:@"￥%.1f", [[dic objectForKey:@"price"] floatValue]];
+            _goodsCouponPriceLabel.text = [NSString stringWithFormat:@"%@元券", [dic objectForKey:@"promoPrice"]];
+            _goodsBuyNumLabel.text = [NSString stringWithFormat:@"月销 %@", [dic objectForKey:@"sale"]];
+            _taobaoCouponAddress = [dic objectForKey:@"iOSUrl"];
+            _taobaoProductId = StringFormat(dic[@"productId"]);
+            
+            //商品图片请求
+            [HTTPManager getGoodsDetailImages:^(NSString *imageStr) {
+                
+                [self.webView loadHTMLString:imageStr baseURL:nil];
+                
+            } imagesLink:[dic objectForKey:@"detailImagesLink"]];
+            
+        }else if (code.intValue == 1001){
+            //请求超时
+//            [_hud hideAnimated:YES];
+            [XSInfoView showInfo:@"请求超时，请重新发起请求" onView:self.view];
+        }else{
+            
+//            [_hud hideAnimated:YES];
+            [XSInfoView showInfo:msg onView:self.view];
+        }
+        
+    } goodsId:self.goodsId];
+}
+
+#pragma mark - 验证收藏请求
+- (void)getCollectionInfo:(NSInteger)type{
+    
+    if (_isCollRequesting == NO) {
+        
+        _isCollRequesting = YES;
+        
+        [HTTPManager goodsCollectionRelatedRequest:^(NSString *code, NSString *msg, id result) {
+            if (code.intValue == 200 || code.intValue == 201) {
+                
+                _collectionType = [result boolValue];
+                
+                UIButton *navBtn = [self.navigationController.navigationBar viewWithTag:650];
+                UIButton *defBtn = [self.view viewWithTag:700];
+                UIButton *collBtn = [self.view viewWithTag:101];
+                //此处判断商品是否被收藏
+                if ([result intValue] == 1) {
+                    [navBtn setImage:image(@"home_btn_goodsDetail_coll_second_seled") forState:UIControlStateNormal];
+                    [defBtn setImage:image(@"home_btn_goodsDetail_collection_seled") forState:UIControlStateNormal];
+                    if ([UserDefaultUtil boolValueForKey:IS_PARTNER] == NO) {
+                        [collBtn setTitle:@"已收藏" forState:UIControlStateNormal];
+                    }
+                }else{
+                    [navBtn setImage:image(@"home_btn_goodsDetail_coll_second") forState:UIControlStateNormal];
+                    [defBtn setImage:image(@"home_btn_goodsDetail_collection") forState:UIControlStateNormal];
+                    if ([UserDefaultUtil boolValueForKey:IS_PARTNER] == NO) {
+                        [collBtn setTitle:@"收藏" forState:UIControlStateNormal];
+                    }
+                }
+            }else{
+                [XSInfoView showInfo:msg onView:self.view];
+            }
+            
+            _isCollRequesting = NO;
+            
+        } goodsId:self.goodsId type:type];
+        
+    }else{
+        
+        [XSInfoView showInfo:@"您的手速太快了~" onView:self.view];
+    }
+    
+}
+
+#pragma mark - UIWebViewDelegate
+
+- (void)webViewDidStartLoad:(UIWebView *)webView{
+    NSLog(@"开始加载");
+
+}
+//开始获取到网页内容时返回
+- (void)webViewDidFinishLoad:(UIWebView *)webView{
+    
+    NSLog(@"加载完成");
+    //此处也要进行限制
+    NSString *script = [NSString stringWithFormat:
+                        @"var script = document.createElement('script');"
+                        "script.type = 'text/javascript';"
+                        "script.text = \"function ResizeImages() { "
+                        "var img;"
+                        "var maxwidth=%f;"
+                        "for(i=0;i <document.images.length;i++){"
+                        "img = document.images[i];"
+                        "if(img.width > maxwidth){"
+                        "img.width = maxwidth;"
+                        "}"
+                        "}"
+                        "}\";"
+                        "document.getElementsByTagName('head')[0].appendChild(script);", Screen_Width];
+    [webView stringByEvaluatingJavaScriptFromString: script];
+    [webView stringByEvaluatingJavaScriptFromString:@"ResizeImages();"];
+    
+//方法1 计算高度
+//    CGRect frame = webView.frame;
+//    CGSize fittingSize = [webView sizeThatFits:CGSizeZero];
+//    frame.size = fittingSize;
+//    webView.frame = frame;
+////方法2
+//    NSInteger height = [[webView stringByEvaluatingJavaScriptFromString:
+//                         @"document.body.clientHeight"] integerValue];
+//    _webViewHeight = height;
+//    NSLog(@"高度%ld",height);
+    
+    //方法3 计算高度
+//    CGFloat documentWidth = [[webView stringByEvaluatingJavaScriptFromString:@"document.getElementById('content').offsetWidth"] floatValue];
+//    CGFloat documentHeight = [[webView stringByEvaluatingJavaScriptFromString:@"document.getElementById(\"content\").offsetHeight;"] floatValue];
+    
+    //方法4
+    CGRect frame = webView.frame;
+    frame.size.width = Screen_Width;
+    frame.size.height = 1;
+    webView.frame = frame;
+    frame.size.height = webView.scrollView.contentSize.height;
+    webView.frame = frame;
+    _webViewHeight = frame.size.height ;
+    NSLog(@"高度%ld",_webViewHeight);
+
+    
+    [self.webView mas_updateConstraints:^(MASConstraintMaker *make) {
+        make.left.right.equalTo(self.view);
+        make.top.equalTo(_goodsBuyNumLabel.mas_bottom).mas_offset(30*SProportion_Height);
+        make.height.mas_equalTo(_webViewHeight);
+    }];
+    self.scrollView.contentSize = CGSizeMake(Screen_Width, 435*SProportion_Height + _webViewHeight);
+    
+    
+//    [_hud hideAnimated:YES];
+
+    
+}
+
+//- (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType{
+//    NSURL *url = [request URL];
+//    if (navigationType == UIWebViewNavigationTypeOther) {
+//        if ([[url scheme] isEqualToString:@"ready"]) {
+//            float contentHeight = [[url host] floatValue];
+//            CGRect fr = webView.frame;
+//            fr.size = CGSizeMake(webView.frame.size.width, contentHeight);
+//            webView.frame = fr;
+//            NSLog(@"鞍山市所所所所所所所所所所所%f",webView.frame.size.height);
+//            return NO;
+//        }
+//    }
+//    return YES;
+//}
+
+- (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error{
+ 
+    NSLog(@"网页加载失败原因：%@",error);
+
+}
+
+- (void)buttonClick:(UIButton *)button{
+    if (button.tag == 100) {
+        //返回
+        [self.navigationController popViewControllerAnimated:YES];
+        
+    }else if (button.tag == 101){
+        //分享赚  不是合伙人的时候为 收藏button
+        if (TOKEN_ISEMPTY) {
+
+            UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"" message:@"亲~登录后才能添加收藏呦~" preferredStyle:UIAlertControllerStyleAlert];
+            
+            UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"去登录" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                RegisterViewController *rvc = [[RegisterViewController alloc] init];
+                NavigationController *nav = [[NavigationController alloc] initWithRootViewController:rvc];
+                [self presentViewController:nav animated:YES completion:nil];
+            }];
+            
+            UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"再看看" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+                
+            }];
+            
+            [alertController addAction:okAction];
+            [alertController addAction:cancelAction];
+            [self presentViewController:alertController animated:YES completion:nil];
+            
+        }else{
+            if ([UserDefaultUtil boolValueForKey:IS_PARTNER] == NO) {
+                //非合伙人 收藏功能
+                if (_collectionType == NO) {
+                    //未收藏 发起去收藏
+                    [self getCollectionInfo:1];
+                }else{
+                    //已收藏 发起取消收藏
+                    [self getCollectionInfo:2];
+                }
+            }else{
+                //分享赚功能
+                ShareEarnViewController *sevc = [[ShareEarnViewController alloc] init];
+                [self.navigationController pushViewController:sevc animated:YES];
+            }
+        }
+        
+    }else if (button.tag == 102){
+        //领券购买 https://uland.taobao.com/coupon/edetail?e=l9IcG8CE1j0GQASttHIRqdoZfJv4a6ojU/P/NRwLOgSduupWHNIN9jSt0VUgwaT4YDsY970bKugb2p1NFGZ0M5Q5wfGz/u+NQBn7zDnw9RfTulAYBVb7JmuFqp8TFaHMonv6QcvcARY=&traceId=0ab84a5b15130461085068815e&activityId=725ed2e35fbf447da74c2fcda1185eda
+        //http://uland.taobao.com/coupon/edetail?activityId=xxxx&pid=mm_51404185_38816963_145356333&itemId=xxxxx
+        
+//        NSURL *taobaoUrl = [NSURL URLWithString:_taobaoCouponAddress];
+//        if ([[UIApplication sharedApplication] canOpenURL:taobaoUrl]) {
+//            //能打开淘宝就打开淘宝
+//            [[UIApplication sharedApplication] openURL:taobaoUrl];
+//        }
+#pragma mark - 统计、跳转手淘
+        NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
+                              _goodsInfoDic[@"title"], @"商品名称",
+                              _goodsInfoDic[@"description"], @"商品描述",
+                              StringFormat(_goodsInfoDic[@"originalPrice"]), @"商品原价",
+                              StringFormat(_goodsInfoDic[@"price"]), @"商品实际价格",
+                              nil];
+        [MobClick event:@"receive_Coupon" attributes:dict];//领取优惠券信息统计
+        
+        AlibcTradeShowParams *showParam = [[AlibcTradeShowParams alloc] init];
+        showParam.openType = AlibcOpenTypeNative;
+        showParam.backUrl = @"tbopen24795861";//指定手淘回跳的地址
+        showParam.linkKey = @"taobao_scheme";//优先拉起的linkKey
+        showParam.isNeedPush = YES;
+        //打开商品详情页
+//        id<AlibcTradePage> page = [AlibcTradePageFactory itemDetailPage: _taobaoProductId];
+        id<AlibcTradePage> page = [AlibcTradePageFactory page:_taobaoCouponAddress];
+
+        //淘客参数
+        AlibcTradeTaokeParams *taokeParams = [[AlibcTradeTaokeParams alloc] init];
+        taokeParams.adzoneId = ALIBAICHUAN_APPKEY;//例如@{@"taokeAppkey":@"23428351"}
+        taokeParams.pid = ALIMAMATAOKE_PID;//例如mm_100713040_22792955_75330474
+        
+        [[AlibcTradeSDK sharedInstance].tradeService show:self.navigationController page:page showParams:showParam taoKeParams:taokeParams trackParam:nil tradeProcessSuccessCallback:^(AlibcTradeResult * _Nullable result) {
+
+            NSLog(@"支付成功回调：%@",result);
+
+        } tradeProcessFailedCallback:^(NSError * _Nullable error) {
+
+            NSLog(@"支付失败回调：%@",error);
+        }];
+        
+        
+    }else if (button.tag == 500){
+        
+        if (_isOpen == NO) {
+            //更新webview的高度 展开（下面没有加入收藏、暂时不使用）
+            [self.webView mas_updateConstraints:^(MASConstraintMaker *make) {
+                make.left.right.equalTo(self.view);
+                make.top.equalTo(_goodsBuyNumLabel.mas_bottom).mas_offset(35*SProportion_Height);
+                make.height.mas_equalTo(_webViewHeight);
+            }];
+            _isOpen = YES;
+            
+            self.scrollView.contentSize = CGSizeMake(Screen_Width, 435*SProportion_Height + _webViewHeight-40*SProportion_Height);
+
+        }else{
+            [self.webView mas_updateConstraints:^(MASConstraintMaker *make) {
+                make.left.right.equalTo(self.view);
+                make.top.equalTo(_goodsBuyNumLabel.mas_bottom).mas_offset(35*SProportion_Height);
+                make.height.mas_equalTo(0);
+            }];
+            
+            _isOpen = NO;
+            
+            self.scrollView.contentSize = CGSizeMake(Screen_Width, Screen_Height);
+        }
+        
+    }else if (button.tag == 650 || button.tag == 700){
+        if (TOKEN_ISEMPTY) {
+
+            UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"" message:@"亲~登录后才能添加收藏呦~" preferredStyle:UIAlertControllerStyleAlert];
+            
+            UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"去登录" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                RegisterViewController *rvc = [[RegisterViewController alloc] init];
+                NavigationController *nav = [[NavigationController alloc] initWithRootViewController:rvc];
+                [self presentViewController:nav animated:YES completion:nil];
+            }];
+            
+            UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"再看看" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+                
+            }];
+            
+            [alertController addAction:okAction];
+            [alertController addAction:cancelAction];
+            [self presentViewController:alertController animated:YES completion:nil];
+            
+        }else{
+            //收藏
+            if (_collectionType == NO) {
+                //未收藏 发起去收藏
+                [self getCollectionInfo:1];
+            }else{
+                //已收藏 发起取消收藏
+                [self getCollectionInfo:2];
+            }
+            
+            //        [self getCollectionInfo:0];
+        }
+        
+    }
+}
+
+//通过偏移量来控制导航的透明度
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView
+{
+    UIButton *backBtn = [self.view viewWithTag:100];
+    UIButton *navBtn = [self.navigationController.navigationBar viewWithTag:650];
+    UIButton *defBtn = [self.view viewWithTag:700];
+
+    CGFloat offsetY = scrollView.contentOffset.y;
+    if (offsetY > NAVBAR_COLORCHANGE_POINT)
+    {
+        CGFloat alpha = (offsetY - NAVBAR_COLORCHANGE_POINT) / NAV_HEIGHT;
+//        [self wr_setNavBarBackgroundAlpha:alpha];
+//        [self wr_setNavBarTintColor:[[UIColor blackColor] colorWithAlphaComponent:alpha]];
+//        [self wr_setNavBarTitleColor:[[UIColor blackColor] colorWithAlphaComponent:alpha]];
+//        [self wr_setStatusBarStyle:UIStatusBarStyleDefault];
+//        self.title = @"商品详情";
+        self.navigationController.navigationBar.alpha = alpha;
+        
+        backBtn.hidden = YES;
+        navBtn.hidden = NO;
+        defBtn.hidden = YES;
+    }
+    else{
+//        [self wr_setNavBarBackgroundAlpha:0];
+//        [self wr_setNavBarTintColor:[UIColor whiteColor]];
+//        [self wr_setNavBarTitleColor:[UIColor whiteColor]];
+//        [self wr_setStatusBarStyle:UIStatusBarStyleLightContent];
+//        self.title = @"";
+        self.navigationController.navigationBar.alpha = 0;
+        
+        backBtn.hidden = NO;
+        navBtn.hidden = YES;
+        defBtn.hidden = NO;
+    }
+}
+
+#pragma mark - lazyLoading
+- (UIScrollView *)scrollView{
+    if (!_scrollView) {
+        _scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, UI_IS_IPHONE_X? -44: -20, Screen_Width, Screen_Height - 40*SProportion_Height + (UI_IS_IPHONE_X?44:20))];
+        _scrollView.backgroundColor = [UIColor whiteColor];
+        _scrollView.contentSize = CGSizeMake(Screen_Width, Screen_Height);
+        _scrollView.delegate = self;
+        [self.view addSubview:_scrollView];
+    }
+    return _scrollView;
+}
+
+- (UIImageView *)goodsImageView{
+    if (!_goodsImageView) {
+        //此处把导航设置为透明度为0时 图片随之向上偏移导航的高度
+        _goodsImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, Screen_Width, 300*SProportion_Height)];
+        _goodsImageView.image = image(@"home_img_godsDatil_plaHolder");
+        _goodsImageView.contentMode = UIViewContentModeScaleAspectFill;
+        _goodsImageView.clipsToBounds = YES;
+        [self.scrollView addSubview:_goodsImageView];
+    }
+    return _goodsImageView;
+}
+
+- (UIWebView *)webView{
+    if (!_webView) {
+        _webView = [[UIWebView alloc] init];
+        _webView.backgroundColor = BackgroundColor;
+        _webView.delegate = self;
+        _webView.scrollView.scrollEnabled = NO;
+//        [_webView loadHTMLString:@"<img src=\"https://img.alicdn.com/imgextra/i1/751767050/TB2VVLVhTwKL1JjSZFgXXb6aVXa_!!751767050.jpg \"><img src=\"https://img.alicdn.com/imgextra/i4/751767050/TB2QMdFbbL9F1JjSZFwXXcSuVXa_!!751767050.jpg \"><img src=\"https://img.alicdn.com/imgextra/i1/751767050/TB27E5WXRLkJKJjSspjXXXkLXXa_!!751767050.jpg \"> <img src=\"https://img.alicdn.com/imgextra/i4/751767050/TB2y8hRXxLiFuJjSZFIXXclLVXa_!!751767050.jpg \"> <img src=\"https://img.alicdn.com/imgextra/i4/751767050/TB2TPrxb1rAQeBjSZFrXXbSvFXa_!!751767050.jpg \"> <img src=\"https://img.alicdn.com/imgextra/i3/751767050/TB2TED3aiafF1Jjy1zcXXcu5XXa_!!751767050.jpg \">" baseURL:[NSURL URLWithString:@""]];
+        [_webView setScalesPageToFit:YES];
+        [self.scrollView addSubview:_webView];
+    }
+    return _webView;
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+/*
+#pragma mark - Navigation
+
+// In a storyboard-based application, you will often want to do a little preparation before navigation
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    // Get the new view controller using [segue destinationViewController].
+    // Pass the selected object to the new view controller.
+}
+*/
+
+@end

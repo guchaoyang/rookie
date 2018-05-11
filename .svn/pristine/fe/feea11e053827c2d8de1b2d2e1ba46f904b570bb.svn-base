@@ -1,0 +1,20 @@
+//
+//  GoldMallViewController.h
+//  shopping
+//
+//  Created by 谷朝阳 on 2018/3/2.
+//  Copyright © 2018年 GCY. All rights reserved.
+//
+
+#import "BaseViewController.h"
+
+@interface H5RecordPage : BaseViewController
+
+///现金记录 type:0 金币记录 type:1 邀请记录 type:2 其他完整的url地址 type:3
+@property(assign, nonatomic)NSInteger type;
+///标题
+@property(copy, nonatomic)NSString    *titleString;
+///webview需要加载的网址
+@property(copy, nonatomic)NSString    *requestUrl;
+
+@end

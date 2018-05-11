@@ -1,0 +1,220 @@
+//
+//  HTTPManager.h
+//  shopping
+//
+//  Created by 成都牛牛优选信息科技有限公司 on 2018/1/4.
+//  Copyright © 2018年 成都牛牛优选信息科技有限公司. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+
+@interface HTTPManager : NSObject
+
+/**<
+ 查询系统时间 GET
+ */
++ (void)getSystemTimeInfo:(void(^)(NSString *code, NSString *msg))block;
+
+/**<
+ 首页推荐列表 GET
+ */
++ (void)getHomeRecommedListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size;
+
+/**<
+ 首页banner GET
+ */
++ (void)getHomeBannerInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block;
+
+/**<
+ 全部商品（全网汇总） GET
+ */
++ (void)getAllGoodsInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size sort:(NSInteger)sort;
+
+/**<
+ 商品详情 GET
+ */
++ (void)getGoodsDetailInfo:(void(^)(NSString *code, NSString *msg, NSDictionary *dic))block goodsId:(NSString *)goodsId;
+
+/**<
+ 商品详情图片 GET
+ */
++ (void)getGoodsDetailImages:(void(^)(NSString *imageStr))block imagesLink:(NSString *)imagesLink;
+
+
+/**<
+ 9.9包邮 GET
+ */
++ (void)getHomePostFreeListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block price:(NSInteger)price pageNum:(NSInteger)pageNum size:(NSString *)size sort:(NSInteger)sort;
+
+
+/**<
+ 首页榜单 GET
+ */
++ (void)getHomeRankListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size;
+
+
+/**<
+ 首页主分类 GET level 分类层级
+ */
++ (void)getHomeMainCategoryInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block;
+
+/**<
+ 查询指定主分类下所有商品列表 GET
+ 1：默认排序，2：按销量降序，3：按价格升序，4：按价格降序，5：按人气（收藏数）降序
+ */
++ (void)getHomeMainCategoryListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block category:(NSString *)category pageNum:(NSInteger)pageNum size:(NSString *)size sort:(NSInteger)sort;
+
+/**<
+ 商品搜索结果 GET
+ */
++ (void)getSearchResultInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block keywords:(NSString *)Keywords pageNum:(NSInteger)pageNum size:(NSString *)size sort:(NSInteger)sort;
+
+/**<
+ 查询全部活动列表 GET
+ */
++ (void)getActivityListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block;
+
+/**<
+ 活动点赞 POST
+ */
++ (void)postActivityLike:(void(^)(NSString *code, NSString *msg, NSString *result))block activityId:(NSString *)activityId;
+
+/**<
+ 活动取消点赞 DELETE
+ */
++ (void)deleteActivityCancelLike:(void(^)(NSString *code, NSString *msg, NSString *result))block activityId:(NSString *)activityId;
+
+/**<
+ 增加访问次数 PUT
+ */
++ (void)addActivityFoot:(void(^)(NSString *code, NSString *msg, id result))block activityId:(NSString *)activityId;
+
+/**<
+ 发送短信获取验证码 POST
+ */
++ (void)loginSendSMS:(void(^)(NSString *code, NSString *msg, NSString *data))block phoneNum:(NSString *)phoneNum;
+
+/**<
+ 登录 POST
+ */
++ (void)loginRequest:(void(^)(NSString *code, NSString *msg ,id result))block phoneNum:(NSString *)phoneNum code:(NSString *)code;
+
+/**<
+ 修改密码获取验证码 GET
+ */
++ (void)changePasswordSMS:(void(^)(NSString *code, NSString *msg, NSString *data))block phoneNum:(NSString *)phoneNum;
+
+/**<
+ 修改密码 PUT
+ */
++ (void)changePassword:(void(^)(NSString *code, NSString *msg ,id result))block phoneNum:(NSString *)phoneNum password:(NSString *)password code:(NSString *)code;
+
+/**<
+ 获取用户信息 GET
+ */
++ (void)getUserInfo:(void(^)(NSString *code, NSString *msg ,NSDictionary *result))block;
+
+/**<
+ 账号密码登录 POST
+ */
++ (void)accountPasswordLoginRequest:(void(^)(NSString *code, NSString *msg ,id result))block phoneNum:(NSString *)phoneNum password:(NSString *)password;
+
+/**<
+ 查询收藏状态(GET) type:0
+ 添加收藏(POST)   type:1
+ 取消收藏(DELETE) type:2
+ */
++ (void)goodsCollectionRelatedRequest:(void(^)(NSString *code, NSString *msg ,id result))block goodsId:(NSString *)goodsId type:(NSInteger)type;
+
+/**<
+ 收藏商品列表 GET
+ */
++ (void)getGoodsCollectionList:(void(^)(NSString *code, NSString *msg ,NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size;
+
+/**<
+ 热门搜索标签 GET
+ */
++ (void)getGoodsHotSearchTags:(void(^)(NSString *code, NSString *msg ,NSArray *result))block;
+
+/**<
+ 首页精选推送 GET
+ */
++ (void)getHomeGoodsPushListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size;
+
+/**<
+ 浏览记录 GET
+ */
++ (void)getUserVisitListInfo:(void(^)(NSString *code, NSString *msg, NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size;
+
+/**<
+ 商品数量汇总 GET
+ */
++ (void)getHomeGoodsTotalInfo:(void(^)(NSString *code, NSString *msg, NSDictionary *result))block;
+
+/**<
+ 修改用户信息 PUT
+ 0 昵称
+ 1 性别
+ 2 QQ
+ */
++ (void)changeUserInfo:(void(^)(NSString *code, NSString *msg, id result))block value:(id)value type:(NSInteger)type;
+
+/**<
+ 提交意见反馈 POST
+ */
++ (void)postFeedbackInfo:(void(^)(NSString *code, NSString *msg, id result))block content:(NSString *)content;
+
+/**<
+ 获取推广链接 GET
+ */
++ (void)getShareUrl:(void(^)(NSString *code, NSString *msg, id result))block;
+
+/**<
+ 获取分享的网络图片地址 GET
+ */
++ (void)getShareNetImage:(void(^)(NSString *code, NSString *msg, id result))block;
+
+/**<
+ 获取系统消息 GET
+ */
++ (void)getMessageSystem:(void(^)(NSString *code, NSString *msg, NSArray *result))block pageNum:(NSInteger)pageNum size:(NSString *)size;
+
+/**<
+ 上传头像 POST
+ */
++ (void)uploadUserHead:(void(^)(NSString *code, NSString *msg, id result))block image:(UIImage *)image;
+
+/**<
+ 检查最新版本号 GET
+ */
++ (void)checkAppVersion:(void(^)(NSString *code, NSString *msg, id result))block;
+
+/**<
+ 发送友盟推送设备号 POST
+ */
++ (void)postUMengPushDeviceToken:(void(^)(NSString *code, NSString *msg, id result))block deviceToken:(NSString *)deviceToken;
+
+/**<
+ 淘宝订单自动兑换金币 PUT
+ 状态码 - 401 未授权
+ 状态码 - 40302 淘宝认证失败
+ */
++ (void)orderExchangeGold:(void(^)(NSString *code, NSString *msg, id result))block deviceId:(NSString *)deviceId;
+
+/**<
+ 保存淘宝授权信息 POST
+ deviceId    UUID
+ tbOpenId    淘宝openID
+ tbSessionId 淘宝topAccessToken
+ tbNick      淘宝昵称
+ */
++ (void)saveTaobaoAuthInfo:(void(^)(NSString *code, NSString *msg, id result))block deviceId:(NSString *)deviceId tbOpenId:(NSString *)tbOpenId tbSessionId:(NSString *)tbSessionId tbNick:(NSString *)tbNick;
+
+
+/**<
+ 查询按钮是否可用 GET
+ */
++ (void)querySysBtnStatus:(void(^)(NSString *code, NSString *msg, id result))block;
+
+
+@end
